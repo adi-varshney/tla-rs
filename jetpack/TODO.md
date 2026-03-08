@@ -54,30 +54,30 @@ step was actually completed.
 
 ## Read First
 
-- [ ] Read `jetpack/jetpack.tla`.
-- [ ] Read `jetpack/TLA_PLUS_BIG_PICTURE.md`.
-- [ ] Read `docs/tla-rs-guide.md`.
-- [ ] Read `docs/tla-to-verus-guide.md`.
-- [ ] Read `docs/conversion-testing-guide.md`.
-- [ ] Read `docs/model-checking-source-first.md`.
-- [ ] Read `docs/model_checker_status.md`.
-- [ ] Read `reports/raft_refinement_proof.md`.
-- [ ] Read `src/protocol/Raft/raft_refinement.rs`.
-- [ ] Read `src/protocol/Raft/refinement_proof/`.
-- [ ] Internalize these repo facts before doing Jetpack work:
-  - [ ] The repo has a direct `TLA+ -> Verus` path via
+- [x] Read `jetpack/jetpack.tla`.
+- [x] Read `jetpack/TLA_PLUS_BIG_PICTURE.md`.
+- [x] Read `docs/tla-rs-guide.md`.
+- [x] Read `docs/tla-to-verus-guide.md`.
+- [x] Read `docs/conversion-testing-guide.md`.
+- [x] Read `docs/model-checking-source-first.md`.
+- [x] Read `docs/model_checker_status.md`.
+- [x] Read `reports/raft_refinement_proof.md`.
+- [x] Read `src/protocol/Raft/raft_refinement.rs`.
+- [x] Read `src/protocol/Raft/refinement_proof/`.
+- [x] Internalize these repo facts before doing Jetpack work:
+  - [x] The repo has a direct `TLA+ -> Verus` path via
     `cargo run --manifest-path transpiler/Cargo.toml -- translate-tla ...`.
-  - [ ] The repo has a source-first model checker via
+  - [x] The repo has a source-first model checker via
     `verus-transpile model-check --input ... --types ... --model ...`.
-  - [ ] The model checker is exact only when `state_dedup = "canonical"`.
-  - [ ] Real protocols like Raft still hit existential-expansion blockers.
-  - [ ] The TLA translator docs already warn about unsupported or fragile TLA
+  - [x] The model checker is exact only when `state_dedup = "canonical"`.
+  - [x] Real protocols like Raft still hit existential-expansion blockers.
+  - [x] The TLA translator docs already warn about unsupported or fragile TLA
     patterns such as multi-line conjunction formatting, `RECURSIVE`,
     `INSTANCE`, temporal formulas, and proof syntax.
 
 ## Required Deliverables In `jetpack/`
 
-- [ ] Create `jetpack/translation_audit.md`.
+- [x] Create `jetpack/translation_audit.md`.
 - [ ] Create `jetpack/jetpack.rs`.
 - [ ] Create `jetpack/types.rs`.
 - [ ] Create `jetpack/jetpack_small.model.toml`.
@@ -93,21 +93,21 @@ step was actually completed.
 
 ## Phase 1: Translation Audit
 
-- [ ] Create `jetpack/translation_audit.md` before writing Jetpack spec code.
-- [ ] Include a complete variable inventory from `jetpack/jetpack.tla`.
-- [ ] Include a complete helper/operator inventory.
-- [ ] Include a complete action inventory.
-- [ ] Include the exact safety properties to preserve.
-- [ ] Include a map from TLA constructs to intended Verus encodings.
-- [ ] Include a list of likely `translate-tla` pain points before touching code.
-- [ ] Be explicit about:
-  - [ ] nested log shape
-  - [ ] message bag representation
-  - [ ] view / epoch / jpool record types
-  - [ ] recursive helper definitions
-  - [ ] `UNCHANGED` obligations per action
-  - [ ] constants and finite domains needed for model checking
-- [ ] Do not skip this phase; if you skip it, later translation will drift.
+- [x] Create `jetpack/translation_audit.md` before writing Jetpack spec code.
+- [x] Include a complete variable inventory from `jetpack/jetpack.tla`.
+- [x] Include a complete helper/operator inventory.
+- [x] Include a complete action inventory.
+- [x] Include the exact safety properties to preserve.
+- [x] Include a map from TLA constructs to intended Verus encodings.
+- [x] Include a list of likely `translate-tla` pain points before touching code.
+- [x] Be explicit about:
+  - [x] nested log shape
+  - [x] message bag representation
+  - [x] view / epoch / jpool record types
+  - [x] recursive helper definitions
+  - [x] `UNCHANGED` obligations per action
+  - [x] constants and finite domains needed for model checking
+- [x] Do not skip this phase; if you skip it, later translation will drift.
 
 ## Phase 2: Translator-First, But Not Translator-Only
 
