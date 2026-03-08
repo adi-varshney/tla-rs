@@ -37,9 +37,18 @@
 // JEpochGeqOEpoch                | OK   | RETRACTED | HandleBeginRecoveryReq breaks it
 // ReadyImpliesEpochsEqual        | OK   | RETRACTED | HandlePrepareReq breaks it
 //
-// The "NEEDS" invariants require message-level or client-state support
-// invariants that track data provenance through the protocol. These form
-// the next layer of proof work beyond the structural invariants.
+// NEW message-level / data-provenance invariants (Category 9-10):
+// ViewReplicaIdsValid             | OK   | NEEDS*    | views from messages need msg-level inv
+// ClientPendingCmdsValid          | OK   | SELF      | set only by LClientSendPreaccept
+// PreacceptRequestCmdsValid       | OK   | SELF      | created only by LClientSendPreaccept
+// PreacceptResponseCmdsValid      | OK   | NEEDS     | needs PreacceptRequestCmdsValid
+//
+// *ViewReplicaIdsValid NEEDS a message-level view integrity invariant for
+//  views carried in BeginRecoveryRequest and FinishRecoveryRequest messages.
+//  However, since LDefaultView is the only view constructor and all view
+//  propagation goes through server state, this may be provable by showing
+//  that views in messages always come from server state (which already
+//  satisfies ViewReplicaIdsValid by the inductive hypothesis).
 // =========================================================================
 
 #![allow(unused)]
@@ -275,6 +284,104 @@ pub open spec fn EpochsNonNegative(s: LState, c: LConstants) -> bool {
 }
 
 // =========================================================================
+// Category 9: View Integrity (needed by provenance invariants)
+// =========================================================================
+
+/// All views stored in server state have replica_ids and proposing_replica_ids
+/// that are subsets of c.server.
+///
+/// This is needed to prove that message destinations (which come from
+/// view.replica_ids) are valid servers.
+///
+/// INIT: LDefaultView(c) has replica_ids == c.server, proposing_replica_ids == c.server.
+///       So subset_of(c.server) trivially holds.
+///
+/// INDUCTIVE: Views are updated in two ways:
+///   (a) From LDefaultView(c) -- always valid
+///   (b) From message fields (mnew_view, mold_view in BeginRecoveryRequest,
+///       mview in PreacceptResponse, mnew_view in FinishRecoveryRequest)
+///       These need a corresponding message-level invariant.
+///   For now, this invariant captures the server-state side.
+///   The message-level side would be:
+///     "All LView values carried in messages have replica_ids ⊆ c.server"
+pub open spec fn ViewReplicaIdsValid(s: LState, c: LConstants) -> bool {
+    &&& forall |i: int| c.server.contains(i) ==> {
+        &&& s.old_view[i].replica_ids.subset_of(c.server)
+        &&& s.old_view[i].proposing_replica_ids.subset_of(c.server)
+        &&& s.new_view[i].replica_ids.subset_of(c.server)
+        &&& s.new_view[i].proposing_replica_ids.subset_of(c.server)
+    }
+    &&& forall |cl: int| c.client.contains(cl) ==> {
+        &&& s.client_view[cl].replica_ids.subset_of(c.server)
+        &&& s.client_view[cl].proposing_replica_ids.subset_of(c.server)
+    }
+}
+
+// =========================================================================
+// Category 10: Command Well-formedness (needed by JPoolKeysValid, ExecutionCmdsWellFormed)
+// =========================================================================
+
+/// All commands in client_pending have valid cmd_id and key.
+///
+/// This is needed to prove ExecutionCmdsWellFormed: when a PreacceptResponse
+/// triggers fast-path commit, the cmd comes from client_pending[cl], so we
+/// need to know it has valid fields.
+///
+/// INIT: client_pending is all None. Vacuously true.
+///
+/// INDUCTIVE: client_pending[cl] is set to Some(cmd) only in
+///   LClientSendPreaccept, where cmd comes from LAvailableCommands.
+///   LAvailableCommands filters by c.cmd_id and c.key, so cmd is valid.
+///   client_pending[cl] is set to None in LHandlePreacceptResponse.
+pub open spec fn ClientPendingCmdsValid(s: LState, c: LConstants) -> bool {
+    forall |cl: int| c.client.contains(cl) && s.client_pending[cl] is Some ==> {
+        let cmd = s.client_pending[cl].unwrap();
+        &&& c.cmd_id.contains(cmd.cmd_id)
+        &&& c.key.contains(cmd.key)
+    }
+}
+
+/// All commands in PreacceptRequest messages have valid cmd_id and key.
+///
+/// This is needed to prove JPoolKeysValid: when LHandlePreacceptRequest
+/// inserts cmd.key into jpool[i].pool, we need c.key.contains(cmd.key).
+///
+/// INIT: messages is empty. Vacuously true.
+///
+/// INDUCTIVE: PreacceptRequest messages are created only by LClientSendPreaccept,
+///   where the cmd comes from LAvailableCommands (which filters by c.cmd_id/c.key).
+///   No other action creates PreacceptRequest messages.
+pub open spec fn PreacceptRequestCmdsValid(s: LState, c: LConstants) -> bool {
+    forall |m: LMessage|
+        s.messages.contains_key(m) && s.messages[m] > 0
+        && m is PreacceptRequest
+        ==> {
+            &&& c.cmd_id.contains(m->mcmd.cmd_id)
+            &&& c.key.contains(m->mcmd.key)
+        }
+}
+
+/// All commands in PreacceptResponse messages have valid cmd_id and key.
+///
+/// Needed because LHandlePreacceptResponse checks client_pending[cl] == Some(mcmd),
+/// so the mcmd in the response must match a valid client_pending cmd.
+///
+/// INIT: messages is empty. Vacuously true.
+///
+/// INDUCTIVE: PreacceptResponse messages are created by LHandlePreacceptRequest,
+///   where mcmd comes from the incoming PreacceptRequest message.
+///   By PreacceptRequestCmdsValid, the cmd is valid.
+pub open spec fn PreacceptResponseCmdsValid(s: LState, c: LConstants) -> bool {
+    forall |m: LMessage|
+        s.messages.contains_key(m) && s.messages[m] > 0
+        && m is PreacceptResponse
+        ==> {
+            &&& c.cmd_id.contains(m->mcmd.cmd_id)
+            &&& c.key.contains(m->mcmd.key)
+        }
+}
+
+// =========================================================================
 // Composite safety invariant
 // =========================================================================
 
@@ -306,6 +413,12 @@ pub open spec fn JetpackSafetyInvariant(s: LState, c: LConstants) -> bool {
     &&& JPoolBallotOrdering(s, c)
     // Recovery
     &&& EpochsNonNegative(s, c)
+    // View integrity
+    &&& ViewReplicaIdsValid(s, c)
+    // Command well-formedness
+    &&& ClientPendingCmdsValid(s, c)
+    &&& PreacceptRequestCmdsValid(s, c)
+    &&& PreacceptResponseCmdsValid(s, c)
     // Named safety properties (from jetpack.tla)
     // These are the ultimate proof targets; the support invariants above
     // are needed to make the inductive argument go through.
@@ -474,6 +587,38 @@ pub proof fn lemma_init_establishes_invariant(s: LState, c: LConstants)
             // Both are LDefaultView(c).epoch == 1, and 1 >= 0
         }
     };
+
+    // -- ViewReplicaIdsValid: all views are LDefaultView(c) with replica_ids == c.server
+    assert(ViewReplicaIdsValid(s, c)) by {
+        assert forall |i: int| c.server.contains(i) implies {
+            &&& s.old_view[i].replica_ids.subset_of(c.server)
+            &&& s.old_view[i].proposing_replica_ids.subset_of(c.server)
+            &&& s.new_view[i].replica_ids.subset_of(c.server)
+            &&& s.new_view[i].proposing_replica_ids.subset_of(c.server)
+        } by {
+            // old_view[i] == new_view[i] == LDefaultView(c)
+            // LDefaultView(c).replica_ids == c.server
+            // LDefaultView(c).proposing_replica_ids == c.server
+            // c.server.subset_of(c.server) trivially
+        }
+        assert forall |cl: int| c.client.contains(cl) implies {
+            &&& s.client_view[cl].replica_ids.subset_of(c.server)
+            &&& s.client_view[cl].proposing_replica_ids.subset_of(c.server)
+        } by {
+            // client_view[cl] == LDefaultView(c), same reasoning
+        }
+    };
+
+    // -- ClientPendingCmdsValid: client_pending[cl] == None for all clients
+    assert(ClientPendingCmdsValid(s, c)) by {
+        // All client_pending values are None, so the implication is vacuously true
+    };
+
+    // -- PreacceptRequestCmdsValid: messages is empty, vacuously true
+    assert(PreacceptRequestCmdsValid(s, c));
+
+    // -- PreacceptResponseCmdsValid: messages is empty, vacuously true
+    assert(PreacceptResponseCmdsValid(s, c));
 }
 
 // =========================================================================

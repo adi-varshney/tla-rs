@@ -86,7 +86,20 @@ and proof skeletons:
 | Recovery | `EpochsNonNegative` | PROVED | assume(false) |
 | Recovery | ~~`ReadyImpliesEpochsEqual`~~ | RETRACTED | Not inductive |
 
-Composite invariant: `JetpackSafetyInvariant` = conjunction of 15 above (2 retracted).
+New message-level / data-provenance invariants (Category 9-10):
+
+| Category | Invariant | Init | Inductive |
+|----------|-----------|------|-----------|
+| View integrity | `ViewReplicaIdsValid` | PROVED | NEEDS* |
+| Cmd well-formedness | `ClientPendingCmdsValid` | PROVED | SELF |
+| Cmd well-formedness | `PreacceptRequestCmdsValid` | PROVED | SELF |
+| Cmd well-formedness | `PreacceptResponseCmdsValid` | PROVED | NEEDS (PreacceptRequestCmdsValid) |
+
+*ViewReplicaIdsValid needs a message-level view integrity invariant for views
+carried in BeginRecoveryRequest/FinishRecoveryRequest, but may be provable from
+the fact that all view propagation goes through server state.
+
+Composite invariant: `JetpackSafetyInvariant` = conjunction of 19 invariants (2 retracted from original 17, 4 new added).
 
 Named safety property lemma skeletons:
 - `lemma_committed_log_agreement_inductive` -- assume(false)
