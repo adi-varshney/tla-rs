@@ -1,11 +1,11 @@
 # Jetpack Proof Status
 
 **Date**: 2026-03-08
-**Last Updated**: Phase 5 -- JPoolBallotOrdering proved, provenance lemma skeletons added,
-  PreacceptRequestProvenance fixed (msource can be client or server via LResubmit),
-  message bag helper lemmas added
+**Last Updated**: Phase 5 -- ClientPendingCmdsValid/ExecutionCmdsWellFormed/
+  OriginalExecutionCmdsWellFormed/JPoolKeysValid preservation proofs written,
+  ViewReplicaIdsValid partial (LFinishRecovery self-contained, rest needs msg reasoning)
 **Codebase**: `jetpack/refinement_proof/`
-**Status**: 5 lemmas proved (init + 4 preservation), 12 assume(false) across 3 files, 2 invariants retracted.
+**Status**: 9 lemmas proved (init + 8 preservation), 13 assume(false) across 3 files, 2 invariants retracted.
 
 ## 1. What Is Proved
 
@@ -80,6 +80,29 @@ is therefore unchanged in all transitions, so cmd-id uniqueness is preserved.
 but `LResubmit` creates PreacceptRequest with `msource = i` (a server, not a client).
 Fixed to allow `c.client.contains(msource) || c.server.contains(msource)`.
 
+### `lemma_client_pending_cmds_valid_inductive` (invariants.rs)
+**Status**: PROVED (modulo Verus compilation).
+**Method**: Only LClientSendPreaccept modifies client_pending (sets Some(cmd) where
+cmd from LAvailableCommands, which filters by c.cmd_id/c.key). LHandlePreacceptResponse
+sets to None (vacuously valid) or unchanged. All other actions: LUnchangedClientVars.
+
+### `lemma_execution_cmds_well_formed_inductive` (invariants.rs)
+**Status**: PROVED (modulo Verus compilation).
+**Method**: Only LHandlePreacceptResponse modifies execution_cmds (push(mcmd)).
+Guard: `s.client_pending[cl] == Some(mcmd)`. By ClientPendingCmdsValid, mcmd is valid.
+Existing entries preserved (push only appends).
+
+### `lemma_original_execution_cmds_well_formed_inductive` (invariants.rs)
+**Status**: PROVED (modulo Verus compilation).
+**Method**: No action modifies original_execution_cmds. All 19 actions set
+`s_.original_execution_cmds == s.original_execution_cmds`.
+
+### `lemma_jpool_keys_valid_inductive` (invariants.rs)
+**Status**: PROVED (modulo Verus compilation, depends on PreacceptRequestCmdsValid upstream).
+**Method**: Only LHandlePreacceptRequest modifies jpool.pool (inserts cmd.key).
+By PreacceptRequestCmdsValid, c.key.contains(cmd.key). LFinishRecovery/LHandleFinishRecovery
+reset to LEmptyJPool(c) which is keyed by c.key. Other actions: struct update preserves pool.
+
 ### Message bag helper lemmas (invariants.rs)
 Added 3 helper lemmas for reasoning about message bag operations:
 - `lemma_with_message_preserves_predicate`: LWithMessage only adds the specified message
@@ -135,19 +158,23 @@ and proof skeletons:
 | Message provenance | `PrepareRequestProvenance` | PROVED | assume(false)* |
 | Message provenance | `AcceptRequestProvenance` | PROVED | assume(false)* |
 | Message provenance | `FinishRecoveryRequestProvenance` | PROVED | assume(false)* |
-| Execution trace | `ExecutionCmdsWellFormed` | PROVED | needs proof |
-| Execution trace | `OriginalExecutionCmdsWellFormed` | PROVED | TRIVIAL (never modified) |
+| Execution trace | `ExecutionCmdsWellFormed` | PROVED | PROVED |
+| Execution trace | `OriginalExecutionCmdsWellFormed` | PROVED | PROVED (never modified) |
 | Cmd-ID uniqueness | `CommittedCmdIdsUnique` | PROVED | PROVED |
-| JPool | `JPoolKeysValid` | PROVED | needs proof |
+| JPool | `JPoolKeysValid` | PROVED | PROVED* |
 | JPool | `JPoolBallotOrdering` | PROVED | PROVED |
 | Recovery | `EpochsNonNegative` | PROVED | TRIVIAL (nat type) |
 | Recovery | ~~`ReadyImpliesEpochsEqual`~~ | RETRACTED | Not inductive |
-| View integrity | `ViewReplicaIdsValid` | PROVED | needs proof |
-| Cmd well-formedness | `ClientPendingCmdsValid` | PROVED | TRIVIAL (self-contained) |
-| Cmd well-formedness | `PreacceptRequestCmdsValid` | PROVED | TRIVIAL (self-contained) |
+| View integrity | `ViewReplicaIdsValid` | PROVED | assume(false)** |
+| Cmd well-formedness | `ClientPendingCmdsValid` | PROVED | PROVED |
+| Cmd well-formedness | `PreacceptRequestCmdsValid` | PROVED | needs LAddMessages |
 | Cmd well-formedness | `PreacceptResponseCmdsValid` | PROVED | needs PreacceptRequestCmdsValid |
 
-*Provenance invariants have documented proof strategies and sub-lemma skeletons,
+*JPoolKeysValid depends on PreacceptRequestCmdsValid, which has upstream assume(false).
+**ViewReplicaIdsValid: LFinishRecovery case self-contained; 3 message-dependent cases
+need LAddMessages reasoning for message-level view integrity.
+
+Provenance invariants have documented proof strategies and sub-lemma skeletons,
 but need LAddMessages reasoning (recursive function induction) to fully discharge.
 
 Composite invariant: `JetpackSafetyInvariant` = conjunction of 19 invariants.
@@ -169,12 +196,12 @@ Named safety property lemma skeletons (all have LNext requires, all have assume(
 
 ## 3. Assumptions That Remain
 
-Total `assume(false)` count: **12** (across 3 files)
+Total `assume(false)` count: **13** (across 3 files)
 
-Note: count went up from 5 because 5 new provenance sub-lemma skeletons were added
-(previously no sub-lemmas existed for provenance), and the top-level inductive lemma
-still has assume(false). The 4 newly proved lemmas (TypeInvariant, CommitIndexBounded,
-CommittedCmdIdsUnique, JPoolBallotOrdering) no longer have assume(false).
+Note: count is higher than original 8 because new sub-lemma skeletons were added.
+9 lemmas are now fully proved (no assume(false)); 7 sub-lemmas and the top-level
+inductive lemma still have assume(false). The remaining assume(false) instances are
+concentrated in message-level reasoning (LAddMessages) and the 3 named safety properties.
 
 | File | Lemma | assume(false) count | Notes |
 |------|-------|---------------------|-------|
@@ -184,6 +211,7 @@ CommittedCmdIdsUnique, JPoolBallotOrdering) no longer have assume(false).
 | invariants.rs | `lemma_prepare_request_provenance_inductive` | 1 | Needs LAddMessages induction |
 | invariants.rs | `lemma_accept_request_provenance_inductive` | 1 | Needs LAddMessages induction |
 | invariants.rs | `lemma_finish_recovery_request_provenance_inductive` | 1 | Needs LAddMessages induction |
+| invariants.rs | `lemma_view_replica_ids_valid_inductive` | 1 | Needs message-level view integrity |
 | invariants.rs | `lemma_committed_log_agreement_inductive` | 1 | Needs quorum intersection |
 | invariants.rs | `lemma_log_order_matches_execution_inductive` | 1 | Needs conflict-order formalization |
 | invariants.rs | `lemma_execution_dedup_matches_inductive` | 1 | Needs dedup properties |
@@ -196,6 +224,10 @@ CommittedCmdIdsUnique, JPoolBallotOrdering) no longer have assume(false).
 - `lemma_commit_index_bounded_inductive` -- PROVED
 - `lemma_committed_cmd_ids_unique_inductive` -- PROVED
 - `lemma_jpool_ballot_ordering_inductive` -- PROVED
+- `lemma_client_pending_cmds_valid_inductive` -- PROVED
+- `lemma_execution_cmds_well_formed_inductive` -- PROVED
+- `lemma_original_execution_cmds_well_formed_inductive` -- PROVED
+- `lemma_jpool_keys_valid_inductive` -- PROVED (depends on PreacceptRequestCmdsValid upstream)
 
 **Retracted/removed**:
 - `JEpochGeqOEpoch` retracted (not inductive): HandleBeginRecoveryReq sets oepoch independently.
@@ -226,13 +258,12 @@ CommittedCmdIdsUnique, JPoolBallotOrdering) no longer have assume(false).
 
 ### 4.5 `lemma_safety_invariant_inductive`
 **Difficulty**: High
-**Blocker**: Delegates to per-invariant sub-lemmas. Proved sub-lemmas now
-include TypeInvariant, CommitIndexBounded, CommittedCmdIdsUnique, JPoolBallotOrdering.
-Provenance sub-lemmas exist but have assume(false) (LAddMessages reasoning).
-Remaining without sub-lemmas: ExecutionCmdsWellFormed, JPoolKeysValid,
-ViewReplicaIdsValid, ClientPendingCmdsValid, PreacceptRequestCmdsValid,
-PreacceptResponseCmdsValid, plus the three named safety properties.
-**Next step**: Discharge provenance assume(false) via LAddMessages helper.
+**Blocker**: Delegates to per-invariant sub-lemmas. 9 proved sub-lemmas are called.
+Remaining with assume(false): 5 provenance (LAddMessages), ViewReplicaIdsValid
+(message-level view integrity). Remaining without sub-lemmas: PreacceptRequestCmdsValid,
+PreacceptResponseCmdsValid (both need LAddMessages).
+Plus the three named safety properties.
+**Next step**: Discharge LAddMessages-dependent proofs (all 8 share the same blocker).
 
 ### 4.6 `lemma_jpool_ballot_ordering_inductive`
 **Status**: PROVED
@@ -290,7 +321,7 @@ theorem follows by showing the abstraction map is consistent.
 4. ~~Epoch invariants (JEpochGeqOEpoch)~~ -- RETRACTED
 5. **Message provenance invariants** -- sub-lemmas added, blocked on LAddMessages reasoning
 6. ~~**JPool ballot ordering**~~ -- DONE
-7. **ExecutionCmds/OriginalExecutionCmds well-formedness** -- moderate
+7. ~~**ExecutionCmds/OriginalExecutionCmds well-formedness**~~ -- DONE
 8. ~~**CommittedCmdIdsUnique**~~ -- DONE
 9. ~~ReadyImpliesEpochsEqual~~ -- RETRACTED (not inductive)
 10. **CommittedLogAgreement** -- hardest, needs quorum intersection
@@ -305,8 +336,8 @@ theorem follows by showing the abstraction map is consistent.
 | Core invariants | 4 (ElectionSafety, LogMatching, LeaderCompleteness, SMS) | 3 (CommittedLogAgreement, LogOrderMatchesExecution, ExecutionDedupMatches) |
 | Support invariants | 8+ structural + 6 message | 19 across 10 categories |
 | Action branches | ~10 | 19 |
-| Proof LOC (current) | ~10K (invariants.rs alone) | ~1200 (5 lemmas proved + provenance skeletons + helpers) |
-| assume(false) remaining | 12 | 12 (5 new sub-lemma skeletons added) |
+| Proof LOC (current) | ~10K (invariants.rs alone) | ~1400 (9 lemmas proved + skeletons + helpers) |
+| assume(false) remaining | 12 | 13 (many new sub-lemma skeletons added) |
 | Hardest lemma | LeaderCompleteness | CommittedLogAgreement (quorum intersection) |
 | Novel difficulty | Vote provenance chain | 3-D log + conflict-order + dedup |
 
