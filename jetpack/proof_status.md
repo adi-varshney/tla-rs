@@ -1,9 +1,10 @@
 # Jetpack Proof Status
 
 **Date**: 2026-03-08
-**Last Updated**: Phase 5 -- init lemma proved, CurrentTermPositive renamed to CurrentTermNonNeg
+**Last Updated**: Phase 5 -- init lemma proved, per-action UNCHANGED analysis added,
+  ReadyImpliesEpochsEqual retracted (not inductive), replaced with EpochsNonNegative
 **Codebase**: `jetpack/refinement_proof/`
-**Status**: 1 lemma proved (init), 10 assume(false) remaining.
+**Status**: 1 lemma proved (init), 9 assume(false) remaining, 1 invariant retracted.
 
 ## 1. What Is Proved
 
@@ -21,10 +22,26 @@
 - CommittedCmdIdsUnique: vacuous (commit_index == 0)
 - JPoolKeysValid: LEmptyJPool(c).pool keyed by c.key
 - JPoolBallotOrdering: both ballots == 0
-- ReadyImpliesEpochsEqual: jstate == Ready, jepoch == oepoch == 1
+- EpochsNonNegative: jepoch == oepoch == 1 >= 0
 
 **Bug found during proof**: `CurrentTermPositive` (>= 1) was incorrect because
 LInit sets `current_term` to 0. Renamed to `CurrentTermNonNeg` (>= 0).
+
+**Invariant retracted**: `ReadyImpliesEpochsEqual` (jstate == Ready => jepoch == oepoch)
+is NOT inductive. Counter-example: `LHandlePrepareRequest`, `LHandleAcceptRequest`,
+`LHandlePrepareResponse` (!mok), and `LHandleAcceptResponse` (!mok) all update
+`jepoch = max(jepoch, mjepoch)` and `oepoch = max(oepoch, moepoch)` independently
+while keeping `jstate` unchanged. If `moepoch != mjepoch`, the epochs diverge.
+Replaced with the weaker `EpochsNonNegative` (both epochs >= 0).
+
+### Per-action UNCHANGED analysis (invariants.rs)
+A comprehensive 19-action table documenting which state field groups each action
+modifies vs leaves unchanged. This enables trivial preservation proofs for invariants
+that only depend on unchanged fields. Key findings:
+- 15 of 19 actions leave base vars (log, commit_index) unchanged
+- Only LHandlePreacceptRequest modifies log; no action modifies commit_index
+- Only LHandlePreacceptResponse modifies execution_cmds
+- LFinishRecovery and LHandleFinishRecovery reset most jetpack fields
 
 ## 2. What Is Scaffolded
 
@@ -59,7 +76,8 @@ and proof skeletons:
 | Cmd-ID uniqueness | `CommittedCmdIdsUnique` | PROVED | assume(false) |
 | JPool | `JPoolKeysValid` | PROVED | assume(false) |
 | JPool | `JPoolBallotOrdering` | PROVED | assume(false) |
-| Recovery | `ReadyImpliesEpochsEqual` | PROVED | assume(false) |
+| Recovery | `EpochsNonNegative` | PROVED | assume(false) |
+| Recovery | ~~`ReadyImpliesEpochsEqual`~~ | RETRACTED | Not inductive |
 
 Composite invariant: `JetpackSafetyInvariant` = conjunction of all 17 above.
 
@@ -79,23 +97,26 @@ Named safety property lemma skeletons:
 
 ## 3. Assumptions That Remain
 
-Total `assume(false)` count: **10** (across 3 files, down from 11)
+Total `assume(false)` count: **9** (across 3 files, down from 11)
 
 | File | Lemma | assume(false) count | Notes |
 |------|-------|---------------------|-------|
 | invariants.rs | `lemma_safety_invariant_inductive` | 1 | Top-level inductive step |
-| invariants.rs | `lemma_type_invariant_inductive` | 1 | Blocked on LNext import |
-| invariants.rs | `lemma_commit_index_bounded_inductive` | 1 | Blocked on LNext import |
-| invariants.rs | `lemma_jepoch_geq_oepoch_inductive` | 1 | Blocked on LNext import |
-| invariants.rs | `lemma_jpool_ballot_ordering_inductive` | 1 | Blocked on LNext import |
-| invariants.rs | `lemma_committed_cmd_ids_unique_inductive` | 1 | Blocked on LNext import |
+| invariants.rs | `lemma_type_invariant_inductive` | 1 | Proof sketch done, needs LNext import |
+| invariants.rs | `lemma_commit_index_bounded_inductive` | 1 | Per-action analysis done, needs LNext |
+| invariants.rs | `lemma_jepoch_geq_oepoch_inductive` | 1 | Needs careful epoch analysis |
+| invariants.rs | `lemma_jpool_ballot_ordering_inductive` | 1 | Per-action analysis done, needs LNext |
+| invariants.rs | `lemma_committed_cmd_ids_unique_inductive` | 1 | Trivially preserved (no commit_index change) |
 | invariants.rs | `lemma_committed_log_agreement_inductive` | 1 | Needs quorum intersection |
 | invariants.rs | `lemma_log_order_matches_execution_inductive` | 1 | Needs conflict-order formalization |
 | invariants.rs | `lemma_execution_dedup_matches_inductive` | 1 | Needs dedup properties |
 | induction.rs | `lemma_invariant_holds_throughout_behavior` (2x) | 2 | Needs init + inductive lemmas |
 | refinement.rs | `lemma_refinement_correct` | 1 | Needs all safety properties |
 
-**Note**: `lemma_init_establishes_invariant` no longer has assume(false).
+**Notes**:
+- `lemma_init_establishes_invariant` no longer has assume(false).
+- `ReadyImpliesEpochsEqual` was retracted (not inductive), replaced with `EpochsNonNegative`.
+- Per-action UNCHANGED analysis added to invariants.rs for all 19 actions.
 
 ## 4. Technical Blockers Per Lemma
 
@@ -156,13 +177,13 @@ theorem follows by showing the abstraction map is consistent.
 
 1. ~~**Init lemma**~~ -- DONE
 2. **TypeInvariant preservation** -- proof sketch complete, needs LNext import
-3. **CommitIndexBounded preservation** -- moderate, good warm-up
-4. **Epoch invariants** (JEpochGeqOEpoch, CurrentTermNonNeg) -- moderate
+3. **CommitIndexBounded preservation** -- trivially preserved (no commit_index changes)
+4. **Epoch invariants** (JEpochGeqOEpoch, CurrentTermNonNeg, EpochsNonNegative) -- moderate
 5. **Message provenance invariants** -- many cases but individually simple
-6. **JPool invariants** -- moderate
+6. **JPool invariants** -- moderate, 12/19 actions trivial
 7. **ExecutionCmds/OriginalExecutionCmds well-formedness** -- moderate
-8. **CommittedCmdIdsUnique** -- harder, needs log append analysis
-9. **ReadyImpliesEpochsEqual** -- moderate, needs recovery action analysis
+8. **CommittedCmdIdsUnique** -- trivially preserved (no commit_index changes)
+9. ~~ReadyImpliesEpochsEqual~~ -- RETRACTED (not inductive)
 10. **CommittedLogAgreement** -- hardest, needs quorum intersection
 11. **LogOrderMatchesExecution** -- hardest, needs conflict-order analysis
 12. **ExecutionDedupMatches** -- hardest, needs dedup properties
@@ -175,8 +196,8 @@ theorem follows by showing the abstraction map is consistent.
 | Core invariants | 4 (ElectionSafety, LogMatching, LeaderCompleteness, SMS) | 3 (CommittedLogAgreement, LogOrderMatchesExecution, ExecutionDedupMatches) |
 | Support invariants | 8+ structural + 6 message | 17 across 8 categories |
 | Action branches | ~10 | 19 |
-| Proof LOC (current) | ~10K (invariants.rs alone) | ~550 (init proved + skeletons) |
-| assume(false) remaining | 12 | 10 |
+| Proof LOC (current) | ~10K (invariants.rs alone) | ~700 (init proved + per-action analysis) |
+| assume(false) remaining | 12 | 9 |
 | Hardest lemma | LeaderCompleteness | CommittedLogAgreement (quorum intersection) |
 | Novel difficulty | Vote provenance chain | 3-D log + conflict-order + dedup |
 

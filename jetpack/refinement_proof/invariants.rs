@@ -219,10 +219,22 @@ pub open spec fn JPoolBallotOrdering(s: LState, c: LConstants) -> bool {
 // Category 8: JState / Recovery Protocol Consistency
 // =========================================================================
 
-/// Servers in Ready state have jepoch == oepoch (no recovery in progress).
-pub open spec fn ReadyImpliesEpochsEqual(s: LState, c: LConstants) -> bool {
-    forall |i: int| c.server.contains(i) && s.jstate[i] == LJState::Ready ==>
-        s.jepoch[i] == s.oepoch[i]
+/// RETRACTED: ReadyImpliesEpochsEqual was conjectured but is NOT inductive.
+///
+/// Counter-example: LHandlePrepareRequest (and LHandleAcceptRequest,
+/// LHandlePrepareResponse !mok, LHandleAcceptResponse !mok) update
+/// jepoch = max(jepoch, mjepoch) and oepoch = max(oepoch, moepoch)
+/// independently while keeping jstate unchanged. If moepoch != mjepoch,
+/// the epochs diverge even in Ready state.
+///
+/// The correct invariant would need a message-level constraint
+/// (e.g., prepare/accept messages always carry moepoch == mjepoch),
+/// which is not obvious from the TLA+ spec.
+///
+/// Replaced with the weaker EpochsNonNegative.
+pub open spec fn EpochsNonNegative(s: LState, c: LConstants) -> bool {
+    &&& forall |i: int| c.server.contains(i) ==> s.jepoch[i] >= 0
+    &&& forall |i: int| c.server.contains(i) ==> s.oepoch[i] >= 0
 }
 
 // =========================================================================
@@ -256,7 +268,7 @@ pub open spec fn JetpackSafetyInvariant(s: LState, c: LConstants) -> bool {
     &&& JPoolKeysValid(s, c)
     &&& JPoolBallotOrdering(s, c)
     // Recovery
-    &&& ReadyImpliesEpochsEqual(s, c)
+    &&& EpochsNonNegative(s, c)
     // Named safety properties (from jetpack.tla)
     // These are the ultimate proof targets; the support invariants above
     // are needed to make the inductive argument go through.
@@ -424,13 +436,12 @@ pub proof fn lemma_init_establishes_invariant(s: LState, c: LConstants)
         }
     };
 
-    // -- ReadyImpliesEpochsEqual: jstate[i] == Ready and jepoch[i] == oepoch[i]
-    assert(ReadyImpliesEpochsEqual(s, c)) by {
-        assert forall |i: int|
-            c.server.contains(i) && s.jstate[i] == LJState::Ready
-        implies s.jepoch[i] == s.oepoch[i]
+    // -- EpochsNonNegative: jepoch[i] == oepoch[i] == LDefaultView(c).epoch == 1 >= 0
+    assert(EpochsNonNegative(s, c)) by {
+        assert forall |i: int| c.server.contains(i)
+        implies s.jepoch[i] >= 0 && s.oepoch[i] >= 0
         by {
-            // Both are LDefaultView(c).epoch
+            // Both are LDefaultView(c).epoch == 1, and 1 >= 0
         }
     };
 }
@@ -504,6 +515,37 @@ proof fn lemma_type_invariant_inductive(s: LState, s_: LState, c: LConstants)
 }
 
 /// CommitIndexBounded is preserved by all actions.
+///
+/// FIELD DEPENDENCY: commit_index, log
+/// UNCHANGED ANALYSIS (19 actions):
+///   base=U (neither log nor commit_index modified) for 15 of 19 actions:
+///     LClientSendPreaccept, LSendBeginRecovery, LHandleBeginRecoveryRequest,
+///     LHandleBeginRecoveryResponse, LCompleteBeginRecovery, LSendPrepare,
+///     LHandlePrepareRequest, LHandlePrepareResponse, LCompletePrepare,
+///     LSendAccept, LHandleAcceptRequest, LHandleAcceptResponse,
+///     LCompleteAccept, LResubmit, LCompleteResubmit
+///   => TRIVIAL for these 15 actions (commit_index and log unchanged).
+///
+/// NON-TRIVIAL CASES (4 actions that modify base vars):
+///   LHandlePreacceptRequest: may append to log[i][p] but does NOT change commit_index
+///     => new log is longer, commit_index unchanged => still bounded.
+///   LHandlePreacceptResponse: may increase commit_index[cli][p] via client
+///     => BUT this is client-side; actually commit_index is base var, unchanged here.
+///     Wait -- re-checking: LHandlePreacceptResponse has base=U per UNCHANGED analysis.
+///     So actually all client-side actions don't touch commit_index.
+///   LFinishRecovery: modifies ostate but NOT log or commit_index (base=P, only ostate)
+///     => commit_index and log unchanged => trivial.
+///   LHandleFinishRecovery: same as LFinishRecovery (base=P, only ostate)
+///     => commit_index and log unchanged => trivial.
+///
+/// CONCLUSION: CommitIndexBounded is trivially preserved by ALL 19 actions
+/// because no action modifies commit_index without also ensuring the bound.
+/// Actually, re-examining: which action CAN advance commit_index?
+/// In the TLA+ spec, commit_index is a base protocol variable. Looking at
+/// LHandlePreacceptResponse more carefully -- it only modifies client vars.
+/// The base protocol's commit_index is never modified by any Jetpack action
+/// in the standalone spec (it would be modified by a separate base protocol layer).
+/// So CommitIndexBounded is trivially preserved.
 proof fn lemma_commit_index_bounded_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
@@ -512,10 +554,37 @@ proof fn lemma_commit_index_bounded_inductive(s: LState, s_: LState, c: LConstan
     ensures
         CommitIndexBounded(s_, c),
 {
-    assume(false); // TODO
+    // All 19 actions either:
+    // (a) Have LUnchangedBaseVars => commit_index and log identical => trivial
+    // (b) Only modify log (LHandlePreacceptRequest appends) but not commit_index
+    //     => log grows, commit_index unchanged => bound preserved
+    // (c) Only modify ostate (LFinishRecovery, LHandleFinishRecovery)
+    //     => commit_index and log unchanged => trivial
+    assume(false); // BLOCKED: requires LNext import for case-split
 }
 
 /// JEpochGeqOEpoch is preserved by all actions.
+///
+/// FIELD DEPENDENCY: jepoch, oepoch
+/// UNCHANGED ANALYSIS:
+///   jetpack=U for 3 actions: LClientSendPreaccept, LHandlePreacceptResponse, LResubmit
+///     => TRIVIAL (jepoch and oepoch unchanged).
+///   base=U,jetpack=P for 14 actions where jetpack fields are partially modified.
+///   Need to check: do any actions set oepoch > jepoch?
+///
+/// KEY OBSERVATIONS from the TLA+ spec:
+///   - LInit: jepoch = oepoch = DefaultView.epoch => jepoch >= oepoch holds
+///   - LHandleBeginRecoveryRequest: sets oepoch = mnew_view.epoch, but also
+///     new_view = mnew_view, old_view = s.new_view. Does NOT change jepoch.
+///     POTENTIAL ISSUE: oepoch could increase past jepoch!
+///     But looking more carefully: the guard requires the new epoch > current,
+///     and jepoch tracks the Jetpack consensus epoch.
+///   - LHandlePrepareRequest: may update oepoch, jepoch, jpool
+///   - LHandleAcceptRequest: may update oepoch, jepoch, jpool
+///   - LFinishRecovery: sets jepoch = new_view.epoch, oepoch = new_view.epoch => equal
+///   - LHandleFinishRecovery: sets jepoch = mnew_view.epoch, oepoch = moepoch
+///
+/// This invariant needs careful per-action analysis of the epoch updates.
 proof fn lemma_jepoch_geq_oepoch_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
@@ -524,10 +593,35 @@ proof fn lemma_jepoch_geq_oepoch_inductive(s: LState, s_: LState, c: LConstants)
     ensures
         JEpochGeqOEpoch(s_, c),
 {
-    assume(false); // TODO
+    assume(false); // BLOCKED: requires LNext + careful epoch analysis
 }
 
 /// JPoolBallotOrdering is preserved by all actions.
+///
+/// FIELD DEPENDENCY: jpool (specifically jpool[i].accepted_ballot, jpool[i].max_seen_ballot)
+/// UNCHANGED ANALYSIS:
+///   jpool unchanged for 12 of 19 actions:
+///     LClientSendPreaccept, LHandlePreacceptResponse, LSendBeginRecovery,
+///     LHandleBeginRecoveryRequest, LHandleBeginRecoveryResponse,
+///     LCompleteBeginRecovery, LSendPrepare, LCompletePrepare, LSendAccept,
+///     LCompleteAccept, LResubmit, LCompleteResubmit
+///   => TRIVIAL for these 12.
+///
+/// NON-TRIVIAL CASES (7 actions modify jpool):
+///   LHandlePreacceptRequest: sets jpool[i] with pool update for a key
+///     => max_seen_ballot and accepted_ballot not changed in pool update
+///     Actually: only modifies pool[cmd.key], not the ballot fields => TRIVIAL
+///   LHandlePrepareRequest: may update jpool[i].max_seen_ballot
+///     => guard: mmax_seen_ballot > jpool[i].max_seen_ballot
+///     => sets max_seen_ballot = mmax_seen_ballot, accepted_ballot unchanged
+///     => max_seen_ballot increases => ordering preserved
+///   LHandlePrepareResponse: may reset jpool or update based on response
+///     => needs careful analysis
+///   LHandleAcceptRequest: may update jpool[i].max_seen_ballot and accepted_ballot
+///     => guard ensures proper ordering
+///   LHandleAcceptResponse: similar to LHandlePrepareResponse
+///   LFinishRecovery: resets jpool to LEmptyJPool => both ballots 0 => trivial
+///   LHandleFinishRecovery: resets jpool to LEmptyJPool => trivial
 proof fn lemma_jpool_ballot_ordering_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
@@ -536,10 +630,21 @@ proof fn lemma_jpool_ballot_ordering_inductive(s: LState, s_: LState, c: LConsta
     ensures
         JPoolBallotOrdering(s_, c),
 {
-    assume(false); // TODO
+    assume(false); // BLOCKED: requires LNext + ballot update analysis
 }
 
 /// CommittedCmdIdsUnique is preserved by all actions.
+///
+/// FIELD DEPENDENCY: log, commit_index
+/// Since no Jetpack action modifies commit_index (base protocol variable),
+/// and only LHandlePreacceptRequest appends to log (at positions beyond
+/// the current commit_index), the committed prefix is never extended by
+/// any Jetpack action. Therefore, uniqueness within the committed prefix
+/// is trivially preserved.
+///
+/// NOTE: When the base protocol layer advances commit_index, that would
+/// be the non-trivial case. But in the standalone Jetpack spec, commit_index
+/// is only set at init (to 0) and never modified.
 proof fn lemma_committed_cmd_ids_unique_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
@@ -548,8 +653,43 @@ proof fn lemma_committed_cmd_ids_unique_inductive(s: LState, s_: LState, c: LCon
     ensures
         CommittedCmdIdsUnique(s_, c),
 {
-    assume(false); // TODO
+    // Trivially preserved: no action modifies commit_index, and log
+    // only grows (append at end), so the committed prefix is unchanged.
+    assume(false); // BLOCKED: requires LNext import for case-split
 }
+
+// =========================================================================
+// Per-action UNCHANGED summary (reference for proof engineering)
+// =========================================================================
+//
+// Action                      | msgs | base | jetpack | client | exec
+// ----------------------------|------|------|---------|--------|------
+// LClientSendPreaccept        |  M   |  U   |   U     |   M    |  U
+// LHandlePreacceptRequest     |  M   |  P*  |   P*    |   U    |  U
+// LHandlePreacceptResponse    |  M   |  U   |   U     |   M    |  P*
+// LSendBeginRecovery          |  M   |  U   |   P     |   U    |  U
+// LHandleBeginRecoveryRequest |  M   |  U   |   P     |   U    |  U
+// LHandleBeginRecoveryResponse|  M   |  U   |   P     |   U    |  U
+// LCompleteBeginRecovery      |  U   |  U   |   P     |   U    |  U
+// LSendPrepare                |  M   |  U   |   P     |   U    |  U
+// LHandlePrepareRequest       |  M   |  U   |   P     |   U    |  U
+// LHandlePrepareResponse      |  M   |  U   |   P     |   U    |  U
+// LCompletePrepare            |  U   |  U   |   P     |   U    |  U
+// LSendAccept                 |  M   |  U   |   P     |   U    |  U
+// LHandleAcceptRequest        |  M   |  U   |   P     |   U    |  U
+// LHandleAcceptResponse       |  M   |  U   |   P     |   U    |  U
+// LCompleteAccept             |  U   |  U   |   P     |   U    |  U
+// LResubmit                   |  M   |  U   |   U     |   U    |  U
+// LCompleteResubmit           |  U   |  U   |   P     |   U    |  U
+// LFinishRecovery             |  M   |  P*  |   P     |   U    |  U
+// LHandleFinishRecovery       |  M   |  P*  |   P     |   U    |  U
+//
+// U = unchanged, M = modified, P = partially modified
+// P* = only specific sub-fields modified (see per-action notes)
+// base P*: LHandlePreacceptRequest modifies log only;
+//          LFinishRecovery/LHandleFinishRecovery modify ostate only
+// jetpack P*: LHandlePreacceptRequest modifies jpool only
+// exec P*: LHandlePreacceptResponse modifies execution_cmds only
 
 // =========================================================================
 // Named safety property lemma skeletons
