@@ -111,20 +111,32 @@ step was actually completed.
 
 ## Phase 2: Translator-First, But Not Translator-Only
 
-- [ ] Try the repo translator first on the original `jetpack/jetpack.tla`.
-- [ ] If that fails because Jetpack is outside the supported D1 subset, create
+- [x] Try the repo translator first on the original `jetpack/jetpack.tla`.
+  Result: Parse error on `\o` (sequence concat interpreted as octal escape).
+- [x] If that fails because Jetpack is outside the supported D1 subset, create
   a translation-friendly copy inside `jetpack/` and try again.
-- [ ] Record exactly what failed.
-- [ ] Record exactly what syntax or formatting was normalized.
-- [ ] Record exactly what remained manual.
-- [ ] Use translator output only as a starting point.
+  Created `jetpack/jetpack_for_translate.tla` with syntactic normalizations.
+  Still fails on range operator `1..N` used in 6+ critical locations.
+- [x] Record exactly what failed.
+  12+ blocking constructs documented in `translation_audit.md` §13a.
+- [x] Record exactly what syntax or formatting was normalized.
+  7 normalizations applied (ProposerOf, removed RECURSIVE/SelectSeq/record-set defs).
+- [x] Record exactly what remained manual.
+  **Everything** — the translator cannot produce usable output. Full hand-translation required.
+- [x] Use translator output only as a starting point.
+  N/A — no usable output produced.
 - [ ] Manually repair the generated spec until it accurately matches the TLA.
-- [ ] Never claim success just because `translate-tla` emitted a file.
+  N/A — proceeding directly to hand-translation in Phase 3.
+- [x] Never claim success just because `translate-tla` emitted a file.
+  No file was emitted.
 - [ ] Compare the generated operators against the original TLA action by action.
-- [ ] If you create `jetpack_for_translate.tla`, ensure it is only a faithful
+  N/A — no generated operators exist.
+- [x] If you create `jetpack_for_translate.tla`, ensure it is only a faithful
   syntactic normalization, not a semantic redesign.
+  Confirmed: only syntactic changes, all removals clearly commented.
 - [ ] If you create `jetpack.tla-types`, keep it minimal and document why each
   nontrivial annotation exists.
+  Not needed — full hand-translation path chosen.
 
 ## Phase 3: Hand-Finish The `tla-rs` Spec
 

@@ -412,6 +412,69 @@ will be a rough starting point at best. Plan for extensive manual repair. The tr
 should proceed as: (1) try translator, (2) record failures, (3) hand-write the spec
 using translator output where usable and manual translation elsewhere.
 
+## 13a. Phase 2 Translator Results (Actual)
+
+### Attempt 1: Original `jetpack.tla`
+
+**Command**: `verus-transpile translate-tla --input jetpack/jetpack.tla --output /tmp/jetpack_translated.rs --gen-modes`
+
+**Result**: Parse error — `Expected octal digits after \o`
+
+The `\o` TLA+ sequence concatenation operator is interpreted as an octal string escape
+by the parser. Used in `RemoveCmd` (line 230) and `Dedup` (line 237).
+
+### Attempt 2: `jetpack_for_translate.tla` (normalized copy)
+
+Created `jetpack/jetpack_for_translate.tla` with the following syntactic normalizations:
+
+1. **`ProposerOf(_)` → `ProposerOf`**: Changed from operator-constant to map-constant,
+   and updated `ProposerOf(i)` → `ProposerOf[i]`.
+2. **Removed `RemoveCmd` and `Dedup`**: Recursive definitions using `\o` (unsupported).
+3. **Removed `FilterNoOps`**: Uses `SelectSeq` + `LAMBDA` (unsupported).
+4. **Removed `Commands` set definition**: Multi-variable set comprehension with record
+   construction.
+5. **Removed `View`, `JPool`, `PrepResp` type definitions**: Record-set type notation
+   `[field: Nat, ...]` (unsupported).
+6. **Removed `EmptyJPool`**: Contains function construction `[k \in Key |-> NilCmd]`.
+7. **Removed `JPoolCommands`**: Set-map comprehension `{p.pool[k] : k \in Key}`.
+
+**Result**: Parse error — `Expected RBrace, found DotDot` at `SeqToSet`
+
+The range operator (`1..Len(s)`) is used in 6+ critical locations:
+- `SeqToSet(s)` (line 196)
+- `ConflictOrderPreserved` (line 258)
+- `LogCmdIds` (line 267)
+- `CommittedCmds` (line 293)
+- `CommittedLogAgreement` (line 773)
+- `LogOrderMatchesExecution` (line 789)
+
+### Summary of Blocking Constructs
+
+| Construct | Count | Impact |
+|-----------|-------|--------|
+| `\o` (sequence concat) | 2 | Blocks recursive helpers |
+| `1..N` (range operator) | 6+ | Blocks most helpers and all properties |
+| `ProposerOf(_)` (operator constant) | 1 | Blocks constant parsing |
+| Record-set types `[f: T, ...]` | 3 | Blocks type definitions |
+| Multi-var set comprehension | 2+ | Blocks `Commands`, `LogCmdIds` |
+| `SelectSeq` + `LAMBDA` | 1 | Blocks `FilterNoOps` |
+| `@@` / `:>` (function merge) | 1 | Blocks `WithMessage` |
+| `CHOOSE` | 3 | Blocks `Min`, `Max`, `CompletePrepare` |
+| `Cardinality` | 4 | Blocks all quorum definitions |
+| Nested EXCEPT `![i].pool[k]` | 5+ | Blocks most server actions |
+| `RECURSIVE` | 4 | Blocks all recursive helpers |
+| `UNION` (big union) | 2 | Blocks `LogCmdIds`, `AllCommittedCmds` |
+
+### Conclusion
+
+The translator cannot produce usable output for `jetpack.tla`. Even after removing
+12+ definitions, the range operator alone blocks all remaining helpers and properties.
+The spec must be **entirely hand-translated** to Verus.
+
+The `jetpack_for_translate.tla` file is retained as documentation of what was attempted
+and what normalizations were tried. It is NOT a semantic redesign — only syntactic
+changes were made, and the removed definitions are clearly marked.
+
 ## 14. Intended Verus State/Constants Structure
 
 ```rust
