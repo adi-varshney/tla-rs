@@ -7,13 +7,40 @@
 //   2. LogOrderMatchesExecution
 //   3. ExecutionDedupMatches
 //
-// Invariant categories (per TODO.md Phase 5):
-//   - Log / commit-index bounds
-//   - Record well-formedness
-//   - Epoch monotonicity
-//   - Message typing / provenance
-//   - Execution trace well-formedness
-//   - Command-id uniqueness
+// =========================================================================
+// INDUCTIVENESS AUDIT (Phase 5)
+// =========================================================================
+//
+// Legend: SELF = self-contained (no extra invariants needed for induction)
+//         NEEDS = needs additional support invariant(s)
+//         RETRACTED = proved non-inductive, removed from composite
+//         TRIVIAL = preserved by type (nat >= 0) or trivially by all actions
+//
+// Invariant                      | Init | Inductive | Notes
+// -------------------------------|------|-----------|------
+// TypeInvariant                  | OK   | SELF      | .insert preserves domains
+// CommitIndexBounded             | OK   | SELF      | no action modifies commit_index
+// LogTermsNonNegative            | OK   | SELF      | appended term is nat (current_term)
+// CurrentTermNonNeg              | OK   | TRIVIAL   | nat type, no action decreases
+// MessageMultiplicityNonNeg      | OK   | TRIVIAL   | nat type
+// PreacceptRequestProvenance     | OK   | NEEDS     | need: LClientSendPreaccept sends to valid dest
+// BeginRecoveryRequestProvenance | OK   | NEEDS     | need: LSendBeginRecovery sends from server
+// PrepareRequestProvenance       | OK   | NEEDS     | need: LSendPrepare sends from server
+// AcceptRequestProvenance        | OK   | NEEDS     | need: LSendAccept sends from server
+// FinishRecoveryRequestProvenance| OK   | NEEDS     | need: LFinishRecovery sends from server
+// ExecutionCmdsWellFormed        | OK   | NEEDS     | need: client_pending cmds have valid keys
+// OriginalExecutionCmdsWellFormed| OK   | SELF      | original_execution_cmds never modified
+// CommittedCmdIdsUnique          | OK   | SELF      | no action modifies commit_index
+// JPoolKeysValid                 | OK   | NEEDS     | need: preaccept cmd has valid key
+// JPoolBallotOrdering            | OK   | SELF*     | *needs action-level ballot analysis
+// EpochsNonNegative              | OK   | TRIVIAL   | nat type
+// JEpochGeqOEpoch                | OK   | RETRACTED | HandleBeginRecoveryReq breaks it
+// ReadyImpliesEpochsEqual        | OK   | RETRACTED | HandlePrepareReq breaks it
+//
+// The "NEEDS" invariants require message-level or client-state support
+// invariants that track data provenance through the protocol. These form
+// the next layer of proof work beyond the structural invariants.
+// =========================================================================
 
 #![allow(unused)]
 
@@ -83,11 +110,21 @@ pub open spec fn LogTermsNonNegative(s: LState, c: LConstants) -> bool {
 // Category 3: Epoch Monotonicity
 // =========================================================================
 
-/// jepoch[i] >= oepoch[i] for all servers.
-/// The Jetpack epoch is always at least the base protocol epoch.
-pub open spec fn JEpochGeqOEpoch(s: LState, c: LConstants) -> bool {
-    forall |i: int| c.server.contains(i) ==> s.jepoch[i] >= s.oepoch[i]
-}
+/// RETRACTED: JEpochGeqOEpoch (jepoch >= oepoch) was conjectured but is NOT inductive.
+///
+/// Counter-example: LHandleBeginRecoveryRequest sets oepoch[i] = mnew_view.epoch
+/// but leaves jepoch unchanged. If mnew_view.epoch > jepoch[i], then
+/// oepoch[i] > jepoch[i], violating jepoch >= oepoch.
+///
+/// In the TLA+ spec, jepoch and oepoch are independent epoch trackers:
+/// - oepoch: "outer" epoch, updated by BeginRecovery, Prepare, Accept handlers
+/// - jepoch: "jetpack" epoch, updated by Prepare, Accept, FinishRecovery
+/// Both start equal at init but can diverge in either direction.
+/// No ordering invariant between them exists in the protocol.
+///
+/// Placeholder: no replacement needed. EpochsNonNegative already covers
+/// the only provable fact about epochs (both >= 0).
+// pub open spec fn JEpochGeqOEpoch -- RETRACTED
 
 /// current_term is non-negative.
 /// Note: LInit sets current_term to 0 (not 1), so this is >= 0, not >= 1.
@@ -249,8 +286,8 @@ pub open spec fn JetpackSafetyInvariant(s: LState, c: LConstants) -> bool {
     // Log/commit bounds
     &&& CommitIndexBounded(s, c)
     &&& LogTermsNonNegative(s, c)
-    // Epoch monotonicity
-    &&& JEpochGeqOEpoch(s, c)
+    // Epoch properties
+    // Note: JEpochGeqOEpoch was retracted (not inductive)
     &&& CurrentTermNonNeg(s, c)
     // Message provenance
     &&& MessageMultiplicityNonNeg(s, c)
@@ -367,14 +404,7 @@ pub proof fn lemma_init_establishes_invariant(s: LState, c: LConstants)
         }
     };
 
-    // -- JEpochGeqOEpoch: jepoch[i] == oepoch[i] == DefaultView.epoch
-    assert(JEpochGeqOEpoch(s, c)) by {
-        assert forall |i: int| c.server.contains(i)
-        implies s.jepoch[i] >= s.oepoch[i]
-        by {
-            // Both are LDefaultView(c).epoch, so equal
-        }
-    };
+    // -- JEpochGeqOEpoch: RETRACTED (not inductive, see Category 3 comment)
 
     // -- CurrentTermNonNeg: current_term[i] == 0nat >= 0
     assert(CurrentTermNonNeg(s, c)) by {
@@ -563,38 +593,8 @@ proof fn lemma_commit_index_bounded_inductive(s: LState, s_: LState, c: LConstan
     assume(false); // BLOCKED: requires LNext import for case-split
 }
 
-/// JEpochGeqOEpoch is preserved by all actions.
-///
-/// FIELD DEPENDENCY: jepoch, oepoch
-/// UNCHANGED ANALYSIS:
-///   jetpack=U for 3 actions: LClientSendPreaccept, LHandlePreacceptResponse, LResubmit
-///     => TRIVIAL (jepoch and oepoch unchanged).
-///   base=U,jetpack=P for 14 actions where jetpack fields are partially modified.
-///   Need to check: do any actions set oepoch > jepoch?
-///
-/// KEY OBSERVATIONS from the TLA+ spec:
-///   - LInit: jepoch = oepoch = DefaultView.epoch => jepoch >= oepoch holds
-///   - LHandleBeginRecoveryRequest: sets oepoch = mnew_view.epoch, but also
-///     new_view = mnew_view, old_view = s.new_view. Does NOT change jepoch.
-///     POTENTIAL ISSUE: oepoch could increase past jepoch!
-///     But looking more carefully: the guard requires the new epoch > current,
-///     and jepoch tracks the Jetpack consensus epoch.
-///   - LHandlePrepareRequest: may update oepoch, jepoch, jpool
-///   - LHandleAcceptRequest: may update oepoch, jepoch, jpool
-///   - LFinishRecovery: sets jepoch = new_view.epoch, oepoch = new_view.epoch => equal
-///   - LHandleFinishRecovery: sets jepoch = mnew_view.epoch, oepoch = moepoch
-///
-/// This invariant needs careful per-action analysis of the epoch updates.
-proof fn lemma_jepoch_geq_oepoch_inductive(s: LState, s_: LState, c: LConstants)
-    requires
-        JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
-    ensures
-        JEpochGeqOEpoch(s_, c),
-{
-    assume(false); // BLOCKED: requires LNext + careful epoch analysis
-}
+// lemma_jepoch_geq_oepoch_inductive: REMOVED
+// JEpochGeqOEpoch was retracted (not inductive). See Category 3 comment.
 
 /// JPoolBallotOrdering is preserved by all actions.
 ///

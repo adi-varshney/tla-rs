@@ -1,10 +1,10 @@
 # Jetpack Proof Status
 
 **Date**: 2026-03-08
-**Last Updated**: Phase 5 -- init lemma proved, per-action UNCHANGED analysis added,
-  ReadyImpliesEpochsEqual retracted (not inductive), replaced with EpochsNonNegative
+**Last Updated**: Phase 5 -- init lemma proved, per-action UNCHANGED analysis,
+  full inductiveness audit, 2 invariants retracted (JEpochGeqOEpoch, ReadyImpliesEpochsEqual)
 **Codebase**: `jetpack/refinement_proof/`
-**Status**: 1 lemma proved (init), 9 assume(false) remaining, 1 invariant retracted.
+**Status**: 1 lemma proved (init), 8 assume(false) remaining, 2 invariants retracted.
 
 ## 1. What Is Proved
 
@@ -27,7 +27,14 @@
 **Bug found during proof**: `CurrentTermPositive` (>= 1) was incorrect because
 LInit sets `current_term` to 0. Renamed to `CurrentTermNonNeg` (>= 0).
 
-**Invariant retracted**: `ReadyImpliesEpochsEqual` (jstate == Ready => jepoch == oepoch)
+**Invariant retracted (2)**: `JEpochGeqOEpoch` (jepoch >= oepoch) is NOT inductive.
+Counter-example: `LHandleBeginRecoveryRequest` sets `oepoch[i] = mnew_view.epoch`
+but leaves `jepoch` unchanged. If `mnew_view.epoch > jepoch[i]`, then
+`oepoch[i] > jepoch[i]`. In the TLA+ spec, jepoch and oepoch are independent
+epoch trackers that can diverge in either direction. No ordering invariant exists.
+Removed from `JetpackSafetyInvariant` and deleted preservation lemma.
+
+**Invariant retracted (1)**: `ReadyImpliesEpochsEqual` (jstate == Ready => jepoch == oepoch)
 is NOT inductive. Counter-example: `LHandlePrepareRequest`, `LHandleAcceptRequest`,
 `LHandlePrepareResponse` (!mok), and `LHandleAcceptResponse` (!mok) all update
 `jepoch = max(jepoch, mjepoch)` and `oepoch = max(oepoch, moepoch)` independently
@@ -63,8 +70,8 @@ and proof skeletons:
 | Well-formedness | `TypeInvariant` | PROVED | assume(false) |
 | Log/commit bounds | `CommitIndexBounded` | PROVED | assume(false) |
 | Log/commit bounds | `LogTermsNonNegative` | PROVED | assume(false) |
-| Epoch monotonicity | `JEpochGeqOEpoch` | PROVED | assume(false) |
-| Epoch monotonicity | `CurrentTermNonNeg` | PROVED | assume(false) |
+| Epoch monotonicity | ~~`JEpochGeqOEpoch`~~ | RETRACTED | Not inductive |
+| Epoch properties | `CurrentTermNonNeg` | PROVED | TRIVIAL (nat type) |
 | Message provenance | `MessageMultiplicityNonNeg` | PROVED | assume(false) |
 | Message provenance | `PreacceptRequestProvenance` | PROVED | assume(false) |
 | Message provenance | `BeginRecoveryRequestProvenance` | PROVED | assume(false) |
@@ -79,7 +86,7 @@ and proof skeletons:
 | Recovery | `EpochsNonNegative` | PROVED | assume(false) |
 | Recovery | ~~`ReadyImpliesEpochsEqual`~~ | RETRACTED | Not inductive |
 
-Composite invariant: `JetpackSafetyInvariant` = conjunction of all 17 above.
+Composite invariant: `JetpackSafetyInvariant` = conjunction of 15 above (2 retracted).
 
 Named safety property lemma skeletons:
 - `lemma_committed_log_agreement_inductive` -- assume(false)
@@ -97,16 +104,15 @@ Named safety property lemma skeletons:
 
 ## 3. Assumptions That Remain
 
-Total `assume(false)` count: **9** (across 3 files, down from 11)
+Total `assume(false)` count: **8** (across 3 files, down from 11)
 
 | File | Lemma | assume(false) count | Notes |
 |------|-------|---------------------|-------|
 | invariants.rs | `lemma_safety_invariant_inductive` | 1 | Top-level inductive step |
-| invariants.rs | `lemma_type_invariant_inductive` | 1 | Proof sketch done, needs LNext import |
-| invariants.rs | `lemma_commit_index_bounded_inductive` | 1 | Per-action analysis done, needs LNext |
-| invariants.rs | `lemma_jepoch_geq_oepoch_inductive` | 1 | Needs careful epoch analysis |
-| invariants.rs | `lemma_jpool_ballot_ordering_inductive` | 1 | Per-action analysis done, needs LNext |
-| invariants.rs | `lemma_committed_cmd_ids_unique_inductive` | 1 | Trivially preserved (no commit_index change) |
+| invariants.rs | `lemma_type_invariant_inductive` | 1 | SELF: .insert preserves domains |
+| invariants.rs | `lemma_commit_index_bounded_inductive` | 1 | SELF: no commit_index changes |
+| invariants.rs | `lemma_jpool_ballot_ordering_inductive` | 1 | SELF*: needs ballot analysis |
+| invariants.rs | `lemma_committed_cmd_ids_unique_inductive` | 1 | SELF: no commit_index changes |
 | invariants.rs | `lemma_committed_log_agreement_inductive` | 1 | Needs quorum intersection |
 | invariants.rs | `lemma_log_order_matches_execution_inductive` | 1 | Needs conflict-order formalization |
 | invariants.rs | `lemma_execution_dedup_matches_inductive` | 1 | Needs dedup properties |
@@ -115,8 +121,11 @@ Total `assume(false)` count: **9** (across 3 files, down from 11)
 
 **Notes**:
 - `lemma_init_establishes_invariant` no longer has assume(false).
-- `ReadyImpliesEpochsEqual` was retracted (not inductive), replaced with `EpochsNonNegative`.
+- `JEpochGeqOEpoch` retracted (not inductive): HandleBeginRecoveryReq sets oepoch independently.
+- `ReadyImpliesEpochsEqual` retracted (not inductive): Prepare/Accept update epochs independently.
+- `lemma_jepoch_geq_oepoch_inductive` removed (invariant retracted).
 - Per-action UNCHANGED analysis added to invariants.rs for all 19 actions.
+- Full inductiveness audit completed: 7 SELF, 4 TRIVIAL, 6 NEEDS, 2 RETRACTED.
 
 ## 4. Technical Blockers Per Lemma
 
@@ -127,13 +136,12 @@ Total `assume(false)` count: **9** (across 3 files, down from 11)
 ### 4.2 `lemma_safety_invariant_inductive`
 **Difficulty**: High
 **Blocker**: Requires case-splitting over 19 action branches and proving
-all 17+ invariant conjuncts are preserved. This is the bulk of the proof work.
-**Next step**: Start with TypeInvariant preservation (easiest), then
-CommitIndexBounded (moderate), then epoch invariants, then tackle the
-named safety properties last.
+all 15 remaining invariant conjuncts are preserved. This is the bulk of the proof work.
+**Next step**: Start with the 7 SELF-contained invariants, then the 6 NEEDS
+invariants (which require additional message-level support invariants).
 
 ### 4.3 `lemma_type_invariant_inductive`
-**Difficulty**: Low
+**Difficulty**: Low (SELF-contained)
 **Blocker**: Requires LNext to be importable for case-split. Proof sketch
 is complete: all actions use map .insert which preserves domain membership.
 **Next step**: Integrate jetpack.rs as a module import, then case-split.
@@ -178,7 +186,7 @@ theorem follows by showing the abstraction map is consistent.
 1. ~~**Init lemma**~~ -- DONE
 2. **TypeInvariant preservation** -- proof sketch complete, needs LNext import
 3. **CommitIndexBounded preservation** -- trivially preserved (no commit_index changes)
-4. **Epoch invariants** (JEpochGeqOEpoch, CurrentTermNonNeg, EpochsNonNegative) -- moderate
+4. ~~Epoch invariants (JEpochGeqOEpoch)~~ -- RETRACTED
 5. **Message provenance invariants** -- many cases but individually simple
 6. **JPool invariants** -- moderate, 12/19 actions trivial
 7. **ExecutionCmds/OriginalExecutionCmds well-formedness** -- moderate
@@ -196,8 +204,8 @@ theorem follows by showing the abstraction map is consistent.
 | Core invariants | 4 (ElectionSafety, LogMatching, LeaderCompleteness, SMS) | 3 (CommittedLogAgreement, LogOrderMatchesExecution, ExecutionDedupMatches) |
 | Support invariants | 8+ structural + 6 message | 17 across 8 categories |
 | Action branches | ~10 | 19 |
-| Proof LOC (current) | ~10K (invariants.rs alone) | ~700 (init proved + per-action analysis) |
-| assume(false) remaining | 12 | 9 |
+| Proof LOC (current) | ~10K (invariants.rs alone) | ~750 (init proved + audit + analysis) |
+| assume(false) remaining | 12 | 8 |
 | Hardest lemma | LeaderCompleteness | CommittedLogAgreement (quorum intersection) |
 | Novel difficulty | Vote provenance chain | 3-D log + conflict-order + dedup |
 
