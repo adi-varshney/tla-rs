@@ -10,44 +10,54 @@ step was actually completed.
 
 ## Mission
 
-- [ ] Translate `jetpack/jetpack.tla` into a `tla-rs` / Verus-style spec.
-- [ ] Try source-first model checking on the translated Jetpack spec.
-- [ ] Write real proof scaffolding for Jetpack safety properties.
-- [ ] Record all work products inside the `jetpack/` folder.
-- [ ] Treat `jetpack/TLA_PLUS_BIG_PICTURE.md` as context only, not as the
+- [x] Translate `jetpack/jetpack.tla` into a `tla-rs` / Verus-style spec.
+- [x] Try source-first model checking on the translated Jetpack spec.
+  BLOCKED: parser limitation. See `model_check_report.md`.
+- [x] Write real proof scaffolding for Jetpack safety properties.
+  17 invariants, 11 lemma skeletons. See `proof_status.md`.
+- [x] Record all work products inside the `jetpack/` folder.
+- [x] Treat `jetpack/TLA_PLUS_BIG_PICTURE.md` as context only, not as the
   implementation target for this task.
 
 ## Scope Constraints
 
-- [ ] Keep all new files under `jetpack/` unless there is a concrete blocker
+- [x] Keep all new files under `jetpack/` unless there is a concrete blocker
   that cannot be resolved without touching the main source tree.
-- [ ] Avoid unrelated repo edits just to make Jetpack look integrated.
-- [ ] Do not register a new protocol under `src/protocol/*` on the first pass.
-- [ ] Do not modify `reports/model_check/*` on the first pass; keep Jetpack
+  All files under `jetpack/`. No external edits made.
+- [x] Avoid unrelated repo edits just to make Jetpack look integrated.
+- [x] Do not register a new protocol under `src/protocol/*` on the first pass.
+- [x] Do not modify `reports/model_check/*` on the first pass; keep Jetpack
   evidence local to `jetpack/`.
-- [ ] Do not edit `jetpack/jetpack.tla` unless fixing an obvious typo.
-- [ ] If tooling needs a normalized TLA input, create a clearly named copy such
+- [x] Do not edit `jetpack/jetpack.tla` unless fixing an obvious typo.
+- [x] If tooling needs a normalized TLA input, create a clearly named copy such
   as `jetpack/jetpack_for_translate.tla` and explain exactly why it exists.
-- [ ] If any work must go outside `jetpack/`, document:
+  Created `jetpack_for_translate.tla` with syntactic normalizations only.
+- [x] If any work must go outside `jetpack/`, document:
   - [ ] the exact blocker
   - [ ] why a `jetpack/`-local workaround is insufficient
   - [ ] the smallest required external edit
 
 ## Non-Negotiable Semantics
 
-- [ ] Treat `jetpack/jetpack.tla` as the source of truth.
-- [ ] Preserve the genuine 3-D log model.
-- [ ] Do not flatten the log to 2-D.
-- [ ] Do not replace the 3-D log with a projection/refinement shortcut.
-- [ ] Keep the per-proposer `commitIndex` structure.
-- [ ] Preserve the Jetpack actions and safety properties that actually appear
+- [x] Treat `jetpack/jetpack.tla` as the source of truth.
+- [x] Preserve the genuine 3-D log model.
+  `log: Map<int, Map<int, Seq<LLogEntry>>>` -- server -> proposer -> seq.
+- [x] Do not flatten the log to 2-D.
+- [x] Do not replace the 3-D log with a projection/refinement shortcut.
+- [x] Keep the per-proposer `commitIndex` structure.
+  `commit_index: Map<int, Map<int, nat>>` -- server -> proposer -> nat.
+- [x] Preserve the Jetpack actions and safety properties that actually appear
   in `jetpack/jetpack.tla`.
-- [ ] Do not replace message-bag semantics with an ad hoc queue unless you
+  All 19 actions and 3 safety properties preserved.
+- [x] Do not replace message-bag semantics with an ad hoc queue unless you
   write down the semantics-preservation argument.
-- [ ] Do not delete hard helpers such as `AddMessages`, `RemoveCmd`, `Dedup`,
+  Message bag: `Map<LMessage, nat>` with multiplicity.
+- [x] Do not delete hard helpers such as `AddMessages`, `RemoveCmd`, `Dedup`,
   `IndexOf`, or the conflict-order logic just to get the translation through.
-- [ ] Do not weaken the main properties into generic "sanity checks".
-- [ ] Preserve these property names or very close equivalents:
+  All helpers preserved: LAddMessages, LRemoveCmd, LDedup, LIndexOf,
+  LConflictOrderPreserved, etc.
+- [x] Do not weaken the main properties into generic "sanity checks".
+- [x] Preserve these property names or very close equivalents:
   - [ ] `CommittedLogAgreement`
   - [ ] `LogOrderMatchesExecution`
   - [ ] `ExecutionDedupMatches`
