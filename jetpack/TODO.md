@@ -78,8 +78,8 @@ step was actually completed.
 ## Required Deliverables In `jetpack/`
 
 - [x] Create `jetpack/translation_audit.md`.
-- [ ] Create `jetpack/jetpack.rs`.
-- [ ] Create `jetpack/types.rs`.
+- [x] Create `jetpack/jetpack.rs`.
+- [x] Create `jetpack/types.rs`.
 - [ ] Create `jetpack/jetpack_small.model.toml`.
 - [ ] Create `jetpack/model_check_report.md`.
 - [ ] Create `jetpack/proof_status.md`.
@@ -140,33 +140,33 @@ step was actually completed.
 
 ## Phase 3: Hand-Finish The `tla-rs` Spec
 
-- [ ] Make the end state a readable, hand-owned `tla-rs` spec under `jetpack/`,
+- [x] Make the end state a readable, hand-owned `tla-rs` spec under `jetpack/`,
   not a fragile translator dump.
-- [ ] Put shared types in `jetpack/types.rs`.
-- [ ] Put the translated protocol in `jetpack/jetpack.rs`.
-- [ ] Follow the repo's `L*` naming style for spec functions.
-- [ ] Introduce `LState` and `LConstants` in the normal repo style.
-- [ ] Add a top-level `LInit`.
-- [ ] Add a top-level `LNext` corresponding to the Jetpack transition relation.
-- [ ] Preserve all declared state from `jetpack.tla`; do not silently drop
+- [x] Put shared types in `jetpack/types.rs`.
+- [x] Put the translated protocol in `jetpack/jetpack.rs`.
+- [x] Follow the repo's `L*` naming style for spec functions.
+- [x] Introduce `LState` and `LConstants` in the normal repo style.
+- [x] Add a top-level `LInit`.
+- [x] Add a top-level `LNext` corresponding to the Jetpack transition relation.
+- [x] Preserve all declared state from `jetpack.tla`; do not silently drop
   fields.
-- [ ] Preserve frame conditions; every action must make unchanged state
+- [x] Preserve frame conditions; every action must make unchanged state
   explicit.
-- [ ] Translate recursive helpers as spec helpers when appropriate.
-- [ ] Keep action names close to the TLA names so review is possible.
-- [ ] Preserve the bottom-of-file property definitions with equivalent names.
-- [ ] Ensure these structures survive translation:
-  - [ ] multiset/bag-style `messages`
-  - [ ] 3-D `log`
-  - [ ] per-server/per-proposer `commitIndex`
-  - [ ] `View`, `JPool`, `PrepResp`, and message record types
-  - [ ] conflict-order helpers
-  - [ ] `original_execution_cmds`
-  - [ ] `execution_cmds`
-- [ ] Do not collapse multiple Jetpack phases into one vague action.
-- [ ] Do not remove `ClientSendPreaccept`, recovery, prepare, accept, resubmit,
+- [x] Translate recursive helpers as spec helpers when appropriate.
+- [x] Keep action names close to the TLA names so review is possible.
+- [x] Preserve the bottom-of-file property definitions with equivalent names.
+- [x] Ensure these structures survive translation:
+  - [x] multiset/bag-style `messages`
+  - [x] 3-D `log`
+  - [x] per-server/per-proposer `commitIndex`
+  - [x] `View`, `JPool`, `PrepResp`, and message record types
+  - [x] conflict-order helpers
+  - [x] `original_execution_cmds`
+  - [x] `execution_cmds`
+- [x] Do not collapse multiple Jetpack phases into one vague action.
+- [x] Do not remove `ClientSendPreaccept`, recovery, prepare, accept, resubmit,
   or finish-recovery actions just because they are inconvenient.
-- [ ] Do not rename properties into generic placeholders like `Invariant1`.
+- [x] Do not rename properties into generic placeholders like `Invariant1`.
 
 ## Phase 4: Model Checking
 
