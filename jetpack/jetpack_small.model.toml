@@ -1,0 +1,34 @@
+# Jetpack source-first model check — smallest sane config.
+# See jetpack/model_check_report.md for run results and blockers.
+
+[quantifiers.int]
+min = 0
+max = 1
+
+[quantifiers.nat]
+min = 0
+max = 1
+
+# Enum type domains
+[quantifiers.types.LJState]
+kind = "enum_subset"
+variants = ["Ready", "Recovery", "AfterBeginRecovery", "AfterPrepare", "AfterAccept", "AfterResubmit"]
+
+[quantifiers.types.LOState]
+kind = "enum_subset"
+variants = ["Follower", "Candidate", "Leader", "ToBeLeader"]
+
+[collections]
+max_set_len = 2
+max_seq_len = 2
+max_map_len = 2
+
+[search]
+max_depth = 1
+max_states = 200
+timeout_ms = 30000
+state_dedup = "canonical"
+
+[properties]
+check_deadlock = false
+successor_semantics = "deadlock"

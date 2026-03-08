@@ -1,7 +1,7 @@
-// Jetpack protocol types — hand-translated from jetpack/jetpack.tla
+// Jetpack protocol types -- hand-translated from jetpack/jetpack.tla
 //
 // This file defines all shared types for the Jetpack plugin consensus protocol.
-// See jetpack/translation_audit.md for the complete TLA+ → Verus mapping.
+// See jetpack/translation_audit.md for the complete TLA+ -> Verus mapping.
 
 use vstd::prelude::*;
 
@@ -59,7 +59,7 @@ pub struct LView {
 
 // ---- JPool ----
 // TLA+: JPool == [max_seen_ballot: Nat, accepted_ballot: Nat,
-//                 accepted_value: SUBSET Commands, pool: [Key -> Commands ∪ {NilCmd}]]
+//                 accepted_value: SUBSET Commands, pool: [Key -> Commands union {NilCmd}]]
 // pool maps key -> Option<LCmd> where None = NilCmd
 
 #[derive(PartialEq, Eq, Structural)]
@@ -165,7 +165,7 @@ pub struct LConstants {
 
 // ---- State ----
 // All variables from jetpack.tla combined into a single state struct.
-// See translation_audit.md §3 for the complete variable inventory.
+// See translation_audit.md section3 for the complete variable inventory.
 
 pub struct LState {
     // Message bag: Map<LMessage, nat> where value = multiplicity

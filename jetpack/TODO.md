@@ -170,42 +170,46 @@ step was actually completed.
 
 ## Phase 4: Model Checking
 
-- [ ] Use the source-first model checker described in
+- [x] Use the source-first model checker described in
   `docs/model-checking-source-first.md`.
-- [ ] Create `jetpack/jetpack_small.model.toml` as an exact, tiny, bounded run.
-- [ ] Set `state_dedup = "canonical"`.
-- [ ] Keep the initial search depth very small.
-- [ ] Keep the initial domains very small.
-- [ ] Set `check_deadlock = false` initially.
-- [ ] Start with the smallest sane domains, for example:
-  - [ ] 2 servers
-  - [ ] 1 client
-  - [ ] 1 key
-  - [ ] 1 command id
-  - [ ] 1 or 2 proposers
-- [ ] Do not start with a large config.
+- [x] Create `jetpack/jetpack_small.model.toml` as an exact, tiny, bounded run.
+- [x] Set `state_dedup = "canonical"`.
+- [x] Keep the initial search depth very small.
+- [x] Keep the initial domains very small.
+- [x] Set `check_deadlock = false` initially.
+- [x] Start with the smallest sane domains, for example:
+  - [x] 2 servers
+  - [x] 1 client
+  - [x] 1 key
+  - [x] 1 command id
+  - [x] 1 or 2 proposers
+- [x] Do not start with a large config.
 - [ ] Check properties one at a time first:
+  BLOCKED: model checker parser cannot parse the Jetpack spec (closure syntax,
+  matches expressions, struct update). See `model_check_report.md`.
   - [ ] `CommittedLogAgreement`
   - [ ] `LogOrderMatchesExecution`
   - [ ] `ExecutionDedupMatches`
 - [ ] Try a combined run only if the single-property runs are stable.
-- [ ] Record in `jetpack/model_check_report.md`:
-  - [ ] exact command(s) used
-  - [ ] exact model file(s) used
-  - [ ] whether the run was exact or lossy
-  - [ ] whether exploration completed or stopped early
-  - [ ] any JSON report path you saved
-  - [ ] the smallest counterexample or blocker, if any
-- [ ] If the model checker fails:
-  - [ ] reduce to the smallest reproducer
-  - [ ] keep that reproducer in `jetpack/`
-  - [ ] record the exact error text
-  - [ ] distinguish between:
-    - [ ] translation bug
-    - [ ] Jetpack spec bug
-    - [ ] model-checker limitation
-    - [ ] state explosion / existential expansion limit
-- [ ] Do not present `hash_compaction64`, symmetry merging, or incomplete
+  BLOCKED: same parser limitation.
+- [x] Record in `jetpack/model_check_report.md`:
+  - [x] exact command(s) used
+  - [x] exact model file(s) used
+  - [x] whether the run was exact or lossy
+  - [x] whether exploration completed or stopped early
+  - [x] any JSON report path you saved
+  - [x] the smallest counterexample or blocker, if any
+- [x] If the model checker fails:
+  - [x] reduce to the smallest reproducer
+  - [x] keep that reproducer in `jetpack/`
+  - [x] record the exact error text
+  - [x] distinguish between:
+    - [ ] translation bug — NOT the issue
+    - [ ] Jetpack spec bug — NOT the issue
+    - [x] model-checker limitation — THIS IS THE BLOCKER
+      Parser does not support closure syntax, matches, struct update.
+    - [ ] state explosion / existential expansion limit — not reached (parse fails first)
+- [x] Do not present `hash_compaction64`, symmetry merging, or incomplete
   exploration as proof-strength evidence.
 
 ## Phase 5: Proof Work

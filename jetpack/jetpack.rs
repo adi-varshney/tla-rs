@@ -1,4 +1,4 @@
-// Jetpack plugin consensus protocol — hand-translated from jetpack/jetpack.tla
+// Jetpack plugin consensus protocol -- hand-translated from jetpack/jetpack.tla
 //
 // This is a tla-rs / Verus-style spec preserving the genuine 3-D log model,
 // message-bag semantics, per-proposer commitIndex, and all Jetpack actions
