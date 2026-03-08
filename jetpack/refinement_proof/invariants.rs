@@ -59,6 +59,9 @@ include!("../types.rs");
 
 verus! {
 
+// Include protocol spec so we can case-split on LNext for inductive proofs.
+include!("../jetpack_body.rs");
+
 // =========================================================================
 // Category 1: Well-formedness / Type Invariants
 // =========================================================================
@@ -631,29 +634,26 @@ pub proof fn lemma_safety_invariant_inductive(
 )
     requires
         JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c)  -- from jetpack.rs
-        // Placeholder: expand when LNext is importable
-        true,
+        LNext(s, s_, c),
     ensures
         JetpackSafetyInvariant(s_, c),
 {
-    // PROOF STATUS: skeleton only.
-    // Strategy: case-split on which of the 19 LNext branches was taken,
-    // then prove each conjunct of JetpackSafetyInvariant is preserved.
+    // Delegate to per-invariant preservation lemmas.
+    // Each sub-lemma proves one conjunct of JetpackSafetyInvariant is preserved.
+    lemma_type_invariant_inductive(s, s_, c);
+    lemma_commit_index_bounded_inductive(s, s_, c);
+    // LogTermsNonNegative: preserved because appended terms are nat (current_term)
+    // CurrentTermNonNeg: nat type, cannot become negative
+    // MessageMultiplicityNonNeg: nat type
+    // EpochsNonNegative: nat type
+    // The above 4 are TRIVIAL (type-enforced), so no explicit lemma needed.
     //
-    // Expected proof structure (per Raft pattern):
-    //   1. Identify which action branch was taken
-    //   2. For each support invariant, show preservation by that action
-    //   3. For the three safety properties, use the support invariants
-    //      to complete the inductive step
-    //
-    // Key challenges:
-    //   - 19 action branches x 17+ invariant conjuncts = 300+ cases
-    //   - Many actions only modify a subset of state, so most cases
-    //     follow from UNCHANGED obligations
-    //   - The critical cases are the commit/finish actions that modify
-    //     commit_index and execution traces
-    assume(false); // TODO: replace with actual proof
+    // Remaining invariants need explicit proofs:
+    lemma_jpool_ballot_ordering_inductive(s, s_, c);
+    lemma_committed_cmd_ids_unique_inductive(s, s_, c);
+    // Message provenance, execution well-formedness, view integrity,
+    // and the three named safety properties still have assume(false).
+    assume(false); // TODO: remaining invariant preservation proofs
 }
 
 // =========================================================================
@@ -681,12 +681,38 @@ pub proof fn lemma_safety_invariant_inductive(
 proof fn lemma_type_invariant_inductive(s: LState, s_: LState, c: LConstants)
     requires
         TypeInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         TypeInvariant(s_, c),
 {
-    assume(false); // BLOCKED: requires LNext import for case-split
+    // PROOF STRATEGY:
+    // TypeInvariant asserts that all per-server maps contain_key for every server i,
+    // all per-client maps contain_key for every client cl, and nested maps
+    // (log[i][j], commit_index[i][j]) contain_key at both levels.
+    //
+    // Every action modifies maps only via .insert(k, v) where k is in the
+    // appropriate domain (c.server / c.client / c.proposer), guaranteed by
+    // each action's guard (e.g., c.server.contains(i)).
+    //
+    // Key Map axiom used: m.insert(k, v).contains_key(j) <==> (j == k || m.contains_key(j))
+    //
+    // For UNCHANGED maps (s_.field == s.field): trivially same domain.
+    // For modified maps (s_.field == s.field.insert(i, new_val)):
+    //   - For j == i: contains_key trivially (insert adds key i)
+    //   - For j != i: m.insert(i, v).contains_key(j) == m.contains_key(j) == true
+    //
+    // For nested maps (log, commit_index):
+    //   - Outer: s_.log.insert(i, inner_map).contains_key(j) -- same argument
+    //   - Inner: s_.log[i] == s.log[i].insert(p, new_seq)
+    //     s_.log[i].contains_key(q) <==> (q == p || s.log[i].contains_key(q)) == true
+    //   - For j != i: s_.log[j] == s.log[j] -- unchanged inner map
+    //
+    // The SMT solver should handle this with the default Map axioms.
+    // If Verus times out due to 19 disjuncts × ~20 fields, add explicit
+    // case-split hints (one assert-by per action group).
+    //
+    // NOTE: Cannot compile-check without Verus. See CommitIndexBounded proof
+    // for the fallback strategy if automatic verification times out.
 }
 
 /// CommitIndexBounded is preserved by all actions.
@@ -724,18 +750,28 @@ proof fn lemma_type_invariant_inductive(s: LState, s_: LState, c: LConstants)
 proof fn lemma_commit_index_bounded_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         CommitIndexBounded(s_, c),
 {
-    // All 19 actions either:
-    // (a) Have LUnchangedBaseVars => commit_index and log identical => trivial
-    // (b) Only modify log (LHandlePreacceptRequest appends) but not commit_index
-    //     => log grows, commit_index unchanged => bound preserved
-    // (c) Only modify ostate (LFinishRecovery, LHandleFinishRecovery)
-    //     => commit_index and log unchanged => trivial
-    assume(false); // BLOCKED: requires LNext import for case-split
+    // PROOF STRATEGY:
+    // Every action ensures s_.commit_index == s.commit_index (verified by grep).
+    // For 18 of 19 actions, s_.log == s.log (via LUnchangedBaseVars or explicit).
+    // For LHandlePreacceptRequest: s_.log == s.log or s_.log == s.log.insert(i, s.log[i].insert(j, s.log[i][j].push(entry))).
+    //
+    // In all cases:
+    //   s_.commit_index[a][b] == s.commit_index[a][b]  (commit_index unchanged)
+    //   s_.log[a][b].len() >= s.log[a][b].len()         (log never shrinks)
+    //   s.commit_index[a][b] <= s.log[a][b].len()        (CommitIndexBounded(s, c))
+    // Therefore s_.commit_index[a][b] <= s_.log[a][b].len().
+    //
+    // The SMT solver should handle this automatically by unfolding LNext and
+    // each action predicate, since all actions explicitly constrain s_.commit_index
+    // and s_.log. If Verus times out, add per-action assert-by blocks.
+    //
+    // NOTE: Cannot compile-check without Verus. If this proof fails at
+    // verification time, the fix is to add explicit case-split hints via
+    // assert-by blocks for each LNext disjunct.
 }
 
 // lemma_jepoch_geq_oepoch_inductive: REMOVED
@@ -770,12 +806,11 @@ proof fn lemma_commit_index_bounded_inductive(s: LState, s_: LState, c: LConstan
 proof fn lemma_jpool_ballot_ordering_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         JPoolBallotOrdering(s_, c),
 {
-    assume(false); // BLOCKED: requires LNext + ballot update analysis
+    assume(false); // TODO: ballot update analysis for 7 non-trivial cases
 }
 
 /// CommittedCmdIdsUnique is preserved by all actions.
@@ -793,14 +828,22 @@ proof fn lemma_jpool_ballot_ordering_inductive(s: LState, s_: LState, c: LConsta
 proof fn lemma_committed_cmd_ids_unique_inductive(s: LState, s_: LState, c: LConstants)
     requires
         JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         CommittedCmdIdsUnique(s_, c),
 {
-    // Trivially preserved: no action modifies commit_index, and log
-    // only grows (append at end), so the committed prefix is unchanged.
-    assume(false); // BLOCKED: requires LNext import for case-split
+    // PROOF STRATEGY:
+    // CommittedCmdIdsUnique quantifies over log entries within the committed
+    // prefix: for all i, p, k1 < k2 < commit_index[i][p], the cmd_ids differ.
+    //
+    // Every action ensures s_.commit_index == s.commit_index (no action modifies it).
+    // For log:
+    //   - 18 actions: s_.log == s.log => committed prefix identical => trivial
+    //   - LHandlePreacceptRequest: appends to log[i][j] at position log[i][j].len(),
+    //     which is >= commit_index[i][j] (by CommitIndexBounded). So the committed
+    //     prefix log[i][j][0..commit_index[i][j]] is unchanged.
+    //
+    // Since the committed prefix is unchanged in all cases, uniqueness is preserved.
 }
 
 // =========================================================================
@@ -855,9 +898,7 @@ proof fn lemma_committed_log_agreement_inductive(
 )
     requires
         JetpackSafetyInvariant(s, c),
-        // LCommittedLogAgreement(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         // LCommittedLogAgreement(s_, c),
         true,
@@ -882,9 +923,7 @@ proof fn lemma_log_order_matches_execution_inductive(
 )
     requires
         JetpackSafetyInvariant(s, c),
-        // LLogOrderMatchesExecution(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         // LLogOrderMatchesExecution(s_, c),
         true,
@@ -908,9 +947,7 @@ proof fn lemma_execution_dedup_matches_inductive(
 )
     requires
         JetpackSafetyInvariant(s, c),
-        // LExecutionDedupMatches(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         // LExecutionDedupMatches(s_, c),
         true,

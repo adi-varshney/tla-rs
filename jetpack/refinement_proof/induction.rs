@@ -12,6 +12,9 @@ include!("../types.rs");
 
 verus! {
 
+// Include protocol spec for access to LInit, LNext, and action predicates.
+include!("../jetpack_body.rs");
+
 // =========================================================================
 // Behavior-level types (simplified for Jetpack's global-state model)
 // =========================================================================
@@ -27,10 +30,10 @@ pub open spec fn IsValidJetpackBehavior(b: JetpackBehavior) -> bool {
     // All steps share the same constants
     &&& forall |i: int| 0 <= i < b.len() ==> b[i].1 == b[0].1
     // Initial state satisfies LInit
-    // &&& LInit(b[0].0, b[0].1)
+    &&& LInit(b[0].0, b[0].1)
     // Each step satisfies LNext
-    // &&& forall |i: int| 0 <= i < b.len() - 1 ==>
-    //     LNext(b[i].0, b[i + 1].0, b[i].1)
+    &&& forall |i: int| 0 <= i < b.len() - 1 ==>
+        LNext(b[i].0, b[i + 1].0, b[i].1)
 }
 
 // =========================================================================

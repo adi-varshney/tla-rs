@@ -12,6 +12,9 @@ include!("../types.rs");
 
 verus! {
 
+// Include protocol spec for access to LInit, LNext, and action predicates.
+include!("../jetpack_body.rs");
+
 // =========================================================================
 // Abstract sequential state (refinement target)
 // =========================================================================
@@ -79,8 +82,7 @@ pub proof fn lemma_refinement_correct(
 )
     requires
         // JetpackSafetyInvariant(s, c),
-        // LNext(s, s_, c),
-        true,
+        LNext(s, s_, c),
     ensures
         // JetpackSafetyInvariant(s_, c),
         // AbstractifyJetpackState(s_, c) refines AbstractifyJetpackState(s, c)

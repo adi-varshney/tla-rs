@@ -15,6 +15,9 @@ include!("../types.rs");
 
 verus! {
 
+// Include protocol spec for access to LInit, LNext, and action predicates.
+include!("../jetpack_body.rs");
+
 // =========================================================================
 // Distributed Jetpack System State
 // =========================================================================
