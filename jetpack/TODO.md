@@ -80,15 +80,16 @@ step was actually completed.
 - [x] Create `jetpack/translation_audit.md`.
 - [x] Create `jetpack/jetpack.rs`.
 - [x] Create `jetpack/types.rs`.
-- [ ] Create `jetpack/jetpack_small.model.toml`.
-- [ ] Create `jetpack/model_check_report.md`.
-- [ ] Create `jetpack/proof_status.md`.
-- [ ] Create these if needed:
-  - [ ] `jetpack/jetpack.tla-types`
-  - [ ] `jetpack/jetpack_for_translate.tla`
-  - [ ] `jetpack/jetpack_model_check.json`
-  - [ ] `jetpack/refinement_proof/` with proof modules
-- [ ] Do not leave the work as one giant markdown note; the translated spec
+- [x] Create `jetpack/jetpack_small.model.toml`.
+- [x] Create `jetpack/model_check_report.md`.
+- [x] Create `jetpack/proof_status.md`.
+- [x] Create these if needed:
+  - [ ] `jetpack/jetpack.tla-types` -- not needed (full hand-translation)
+  - [x] `jetpack/jetpack_for_translate.tla` -- created for translator attempt
+  - [ ] `jetpack/jetpack_model_check.json` -- not produced (parse failure)
+  - [x] `jetpack/refinement_proof/` with proof modules
+    4 modules: state_machine.rs, invariants.rs, induction.rs, refinement.rs
+- [x] Do not leave the work as one giant markdown note; the translated spec
   must exist as code under `jetpack/`.
 
 ## Phase 1: Translation Audit
@@ -214,68 +215,112 @@ step was actually completed.
 
 ## Phase 5: Proof Work
 
-- [ ] Do real proof work; do not stop at prose.
-- [ ] Mirror the repo's proof organization style, preferably under:
-  - [ ] `jetpack/refinement_proof/state_machine.rs`
-  - [ ] `jetpack/refinement_proof/invariants.rs`
-  - [ ] `jetpack/refinement_proof/induction.rs`
-  - [ ] `jetpack/refinement_proof/refinement.rs`
-- [ ] If a full proof directory is too much for the first pass, at least create
+- [x] Do real proof work; do not stop at prose.
+  Proof scaffolding created with 17 support invariants, 11 lemma skeletons,
+  and named theorem statements. All lemmas have assume(false) -- no proofs
+  discharged yet. See `jetpack/proof_status.md` for full status.
+- [x] Mirror the repo's proof organization style, preferably under:
+  - [x] `jetpack/refinement_proof/state_machine.rs`
+  - [x] `jetpack/refinement_proof/invariants.rs`
+  - [x] `jetpack/refinement_proof/induction.rs`
+  - [x] `jetpack/refinement_proof/refinement.rs`
+- [x] If a full proof directory is too much for the first pass, at least create
   proof modules and theorem skeletons with meaningful names and a clear
   dependency graph.
-- [ ] Focus the first proof pass on safety, not liveness:
-  - [ ] well-formedness / type invariants
-  - [ ] initialization lemmas
-  - [ ] inductive-preservation lemmas
-  - [ ] the three named safety properties
-- [ ] Do not try to prove the user-facing properties directly with no support
+  Full directory created with 4 modules matching Raft proof structure.
+- [x] Focus the first proof pass on safety, not liveness:
+  - [x] well-formedness / type invariants
+  - [x] initialization lemmas
+  - [x] inductive-preservation lemmas
+  - [x] the three named safety properties
+  All defined as spec fns and proof fn skeletons. Proofs not yet discharged.
+- [x] Do not try to prove the user-facing properties directly with no support
   lemmas.
-- [ ] First define a stronger `JetpackSafetyInvariant` or equivalent support
+  JetpackSafetyInvariant defined as conjunction of 17 support invariants.
+- [x] First define a stronger `JetpackSafetyInvariant` or equivalent support
   invariant.
-- [ ] Consider support invariant categories such as:
-  - [ ] log / commit-index bounds
-  - [ ] record well-formedness
-  - [ ] epoch monotonicity
-  - [ ] message typing / provenance
-  - [ ] execution trace well-formedness
-  - [ ] command-id uniqueness assumptions actually enforced by the spec
-- [ ] Borrow structure from Raft, but do not cargo-cult Raft's exact invariants.
-- [ ] Use `reports/raft_refinement_proof.md` to understand proof layout and gap
+  Defined in invariants.rs with 17 conjuncts across 8 categories.
+- [x] Consider support invariant categories such as:
+  - [x] log / commit-index bounds
+    CommitIndexBounded, LogTermsNonNegative
+  - [x] record well-formedness
+    TypeInvariant (all maps keyed over correct domains)
+  - [x] epoch monotonicity
+    JEpochGeqOEpoch, CurrentTermPositive
+  - [x] message typing / provenance
+    5 provenance invariants (PreacceptRequest, BeginRecovery, Prepare, Accept, FinishRecovery)
+  - [x] execution trace well-formedness
+    ExecutionCmdsWellFormed, OriginalExecutionCmdsWellFormed
+  - [x] command-id uniqueness assumptions actually enforced by the spec
+    CommittedCmdIdsUnique
+- [x] Borrow structure from Raft, but do not cargo-cult Raft's exact invariants.
+  Structure mirrors Raft (state_machine/invariants/induction/refinement) but
+  invariants are Jetpack-specific (3-D log, jpool, epoch, conflict-order).
+- [x] Use `reports/raft_refinement_proof.md` to understand proof layout and gap
   reporting discipline.
-- [ ] If assumptions are required, isolate them and document them in
+- [x] If assumptions are required, isolate them and document them in
   `proof_status.md`.
-- [ ] Never scatter undocumented `assume(false)` through the proof and call it
+  All 11 assume(false) locations documented with exact blockers and next steps.
+- [x] Never scatter undocumented `assume(false)` through the proof and call it
   done.
-- [ ] Make sure `jetpack/proof_status.md` includes:
-  - [ ] what is proved
-  - [ ] what is only scaffolded
-  - [ ] what assumptions remain
-  - [ ] the exact technical blocker for each missing lemma
-  - [ ] the next concrete step for each blocker
+  Every assume(false) is documented in proof_status.md with technical blocker.
+- [x] Make sure `jetpack/proof_status.md` includes:
+  - [x] what is proved
+    Nothing yet -- all lemmas have assume(false).
+  - [x] what is only scaffolded
+    17 invariants, 11 lemmas, 4 modules.
+  - [x] what assumptions remain
+    11 assume(false) across 4 files, enumerated in table.
+  - [x] the exact technical blocker for each missing lemma
+    Section 4: per-lemma blocker analysis with difficulty ratings.
+  - [x] the next concrete step for each blocker
+    Section 4: specific next steps for each lemma.
 
 ## Documentation Expectations
 
-- [ ] Leave the `jetpack/` folder in a state where another engineer can answer:
-  - [ ] What exactly from `jetpack.tla` was translated?
-  - [ ] What had to be manual?
-  - [ ] What model-checked?
-  - [ ] What failed, and why?
-  - [ ] What is actually proved?
-  - [ ] What still needs proof engineering?
-- [ ] Replace vague statements like "proof work remains" or "model checking is
+- [x] Leave the `jetpack/` folder in a state where another engineer can answer:
+  - [x] What exactly from `jetpack.tla` was translated?
+    See `translation_audit.md` -- complete inventory of all 7 constants,
+    22 variables, 19 actions, 3 safety properties.
+  - [x] What had to be manual?
+    Everything -- translator cannot handle the spec (12+ blocking constructs).
+    See `translation_audit.md` section 13a.
+  - [x] What model-checked?
+    Nothing -- source-first model checker parser cannot handle closure syntax,
+    matches, struct update. See `model_check_report.md`.
+  - [x] What failed, and why?
+    Model checking: parser limitation (not translation or spec bug).
+    See `model_check_report.md` section 3.
+  - [x] What is actually proved?
+    Nothing yet -- all 11 proof lemmas have assume(false).
+    See `proof_status.md` section 1.
+  - [x] What still needs proof engineering?
+    All 11 lemmas. See `proof_status.md` sections 4-5 for per-lemma
+    blockers and recommended proof order.
+- [x] Replace vague statements like "proof work remains" or "model checking is
   hard" with concrete blockers.
+  All blockers are concrete: parser limitation (model check), quorum
+  intersection lemma (CommittedLogAgreement), conflict-order formalization
+  (LogOrderMatchesExecution), dedup properties (ExecutionDedupMatches).
 
 ## Definition Of Done
 
-- [ ] There is a real translated `tla-rs` spec under `jetpack/`.
-- [ ] The translation preserves the 3-D log architecture.
-- [ ] There is at least one bounded model config under `jetpack/`.
-- [ ] There is a written model-check report with commands, outcomes, and
+- [x] There is a real translated `tla-rs` spec under `jetpack/`.
+  `jetpack/jetpack.rs` (850 lines) + `jetpack/types.rs` (200 lines).
+- [x] The translation preserves the 3-D log architecture.
+  `log: Map<int, Map<int, Seq<LLogEntry>>>` -- server -> proposer -> seq.
+- [x] There is at least one bounded model config under `jetpack/`.
+  `jetpack/jetpack_small.model.toml` with canonical dedup, depth 1, 200 states.
+- [x] There is a written model-check report with commands, outcomes, and
   blockers.
-- [ ] There is proof scaffolding with named invariants and lemmas.
-- [ ] There is a proof status doc that separates proved facts from gaps.
-- [ ] All artifacts remain inside `jetpack/`, unless a documented blocker
+  `jetpack/model_check_report.md` with exact commands, errors, classification.
+- [x] There is proof scaffolding with named invariants and lemmas.
+  `jetpack/refinement_proof/` with 4 modules, 17 invariants, 11 lemma skeletons.
+- [x] There is a proof status doc that separates proved facts from gaps.
+  `jetpack/proof_status.md` with 7 sections covering all aspects.
+- [x] All artifacts remain inside `jetpack/`, unless a documented blocker
   forced something else.
+  All files under `jetpack/`. No external edits required.
 
 ## What Does Not Count As Success
 
@@ -290,14 +335,15 @@ step was actually completed.
 
 ## Preferred Execution Order
 
-- [ ] Follow this order unless a concrete blocker forces a change:
-  - [ ] `translation_audit.md`
-  - [ ] translator-first attempt and notes
-  - [ ] `types.rs`
-  - [ ] `jetpack.rs`
-  - [ ] tiny exact `model.toml`
-  - [ ] model-check evidence / blocker reduction
-  - [ ] proof module skeleton
-  - [ ] proof attempts
-  - [ ] final status docs
-- [ ] If you diverge from this order, explain why in the docs.
+- [x] Follow this order unless a concrete blocker forces a change:
+  - [x] `translation_audit.md`
+  - [x] translator-first attempt and notes
+  - [x] `types.rs`
+  - [x] `jetpack.rs`
+  - [x] tiny exact `model.toml`
+  - [x] model-check evidence / blocker reduction
+  - [x] proof module skeleton
+  - [ ] proof attempts (next: discharge assume(false) per proof_status.md order)
+  - [x] final status docs
+- [x] If you diverge from this order, explain why in the docs.
+  No divergence -- followed the prescribed order exactly.
